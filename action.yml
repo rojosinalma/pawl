@@ -53,8 +53,7 @@ runs:
         curl -fsSL --retry 3 -o "${work}/${asset}" "${base}/${asset}"
         curl -fsSL --retry 3 -o "${work}/checksums.txt" "${base}/checksums.txt"
         # Check the archive against its own line only, so a missing line fails instead of passing vacuously.
-        awk -v f="${asset}" '$2 == f' "${work}/checksums.txt" > "${work}/asset.sha256"
-        if [[ ! -s "${work}/asset.sha256" ]]; then
+        if ! awk -v f="${asset}" '$2 == f { print; found = 1 } END { exit !found }' "${work}/checksums.txt" > "${work}/asset.sha256"; then
           echo "::error::checksums.txt of ${PAWL_VERSION} has no line for ${asset}"
           exit 1
         fi
