@@ -215,3 +215,17 @@ manifest.
     `core.hooksPath` stays. What the existing configuration does not enforce shows up in `pawl check`.
 13. This repository's own dependencies are kept current by Dependabot (Go modules, actions, the toolbox base images).
     Dependabot does not read `mise.toml`; those pins are bumped by hand and re-locked.
+
+## Known limits
+
+1. The toolbox image is 4.2 GB and built for linux/amd64 only (cargo-mutants has no arm64 binary in the lock).
+2. `pawl affected` is exact for Go and Rust. For Python, Ruby and TypeScript it maps a changed file to tests by
+   name, and falls back to the whole suite when a shared test helper or a configuration file changed.
+3. The end-to-end fixtures cover each stack's default path. Not covered by a fixture: Ruby with RSpec, TypeScript on
+   Node without Bun, Python without uv.
+4. `drift.contracts` checks that a changed contract file comes with a version bump in `pawl.toml`. It does not run
+   a breaking-change analysis; a project adds its own (oasdiff, cargo-semver-checks) as a make step.
+5. `drift.docs` and `code.boundaries` are waived by default in every stack: both need project knowledge (what the
+   documented surface is, which layers exist) that no default can supply.
+6. A directive inside a multi-line string literal is counted as a suppression; the string check works per line.
+7. Linux and macOS only. The generated recipes and the hook are POSIX shell.

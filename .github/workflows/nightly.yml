@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      actions: read # `pawl budget` reads the durations of the last check and nightly runs
       issues: write # open or comment on the "nightly failed" issue
     env:
       PAWL_FULL: "1"
@@ -39,6 +40,8 @@ jobs:
           go-version-file: go.mod
       - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
       - name: make nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: make nightly
       - name: Report the failure
         if: failure()

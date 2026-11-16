@@ -25,12 +25,15 @@ jobs:
     timeout-minutes: [[.NightlyTimeout]]
     permissions:
       contents: read
+      actions: read # `pawl budget` reads the durations of the last check and nightly runs
       issues: write # open or comment on the "nightly failed" issue
     env:
       PAWL_FULL: "1"
       PAWL_BASE: origin/[[.DefaultBranch]]
     steps:[[template "setup" .]]
       - name: make nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: make nightly
       - name: Report the failure
         if: failure()
