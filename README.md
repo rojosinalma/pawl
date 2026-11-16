@@ -57,21 +57,23 @@ pawl baseline    # record the rest (suppressions, duplicated blocks, oversized f
 pawl check       # the merge gate, quietly: one line when it passes, only the failing steps when it does not
 ```
 
-The same with mise and make, which is what CI runs:
+The same with `mise` and `make`, which is what CI runs:
 
 ```sh
 mise install     # the pinned tools of the rings (or install them your own way; `pawl doctor` verifies)
 make check       # the merge gate: lint, tests, `pawl verify`
 ```
 
-`pawl run <target>` runs any make target (`lint`, `fmt`, `test`, a single `lint-<tool>`) with the pinned tools on
+`make` is the real contract, Pawl is a frontend over it for ease of use.
+
+`pawl run <target>` runs any `make` target (`lint`, `fmt`, `test`, a single `lint-<tool>`) with the pinned tools on
 PATH, so a shell without mise activated still works.
 
-make is the contract; Pawl is a front end over it. `pawl check` is `pawl run check`: it runs `make check` with the
-pinned tools on PATH, prints only what failed, records the ring's time, and runs the ring in the toolbox image when
+`pawl check` is a shorthand for `pawl run check`: it runs `make check` with the pinned tools on PATH,
+prints only what failed, records the ring's time, and runs the ring in the toolbox image when
 the clone names one.
 
-The generated `mise.toml` pins the tools without a native pin file; the runtime of each stack stays where the
+The generated `mise.toml` pins the tools without a native pin file, the runtime of each stack stays where the
 stack keeps it (`go.mod`, `.ruby-version`, `.python-version`, `rust-toolchain.toml`).
 
 `pawl init` never overwrites a file. An existing `Makefile` gains only the targets it lacks; existing linter
@@ -81,16 +83,16 @@ Day to day:
 
 | Command | Purpose |
 |---|---|
-| `make check` | lint, the affected tests, and the catalog verification; the same command CI runs |
-| `pawl check` | `make check` through `pawl run`: quiet output, the pinned tools on PATH, the toolbox fallback, timing |
-| `pawl run <target>` | a make target through Pawl: a ring (`precommit`, `check`, `nightly`) or any other (`lint`, `fmt`, `test`); `--verbose` streams make's output, `--no-toolbox` stays on this machine |
-| `pawl verify` | the catalog verification alone (manifest, targets, tool configurations, text checks, ratchet); `make check` ends with it |
 | `pawl install` | mise when it is missing, the tools pinned in `mise.toml`, each stack's packages; then `pawl doctor` |
-| `make fmt`, `pawl run fmt` | rewrite files with the stack's formatters |
+| `pawl check` | Shorthand for `make check` through `pawl run`: quiet output, the pinned tools on PATH, the toolbox fallback, timing |
+| `pawl run <target>` | a `make` target through Pawl: a complete ring check (`precommit`, `check`, `nightly`) or any other task (`lint`, `fmt`, `test`); `--verbose` streams `make` output, `--no-toolbox` stays local |
+| `pawl verify` | the Pawl catalog verification alone (manifest, targets, tool configurations, text checks, ratchet); `make check` ends with it |
 | `pawl status` | why the pull request of this branch fails: the check, the first file and line, the fix |
 | `pawl rules` | the catalog with what this project does about each rule; `pawl rules show <id>` explains one |
 | `pawl baseline` | record improved ratchet values; `--grow "reason"` is the one way up |
 | `pawl budget` | the median time of each ring against its target and limit |
+| `make check` | lint, the affected tests, and the catalog verification; the same command CI runs |
+| `make fmt` | rewrite files with the stack's formatters |
 
 ## The manifest
 
@@ -108,7 +110,7 @@ gaps = ["shell: shell has no type checker; ShellCheck covers quoting and expansi
 waived = "go: no layer boundaries declared yet; declare them under depguard and set step = \"lint\""
 ```
 
-A waiver is a decision, written down. The waived rules a tool could enforce are listed by `pawl rules --waived`.
+A waiver is a decision, explicitly written down. Waived rules that a tool could enforce are listed by `pawl rules --waived`, so you never loose track of the reasons behind waived rules.
 
 ## Stacks
 
@@ -119,7 +121,7 @@ A waiver is a decision, written down. The waived rules a tool could enforce are 
 | Tests | go test, shuffled | bun test | minitest or RSpec, random | pytest, random | bats (opt-in) | cargo test |
 | Audit | govulncheck | bun audit | bundler-audit | pip-audit | n/a | cargo-audit, cargo-deny |
 
-Every stack also gets ast-grep (pattern rules: the configuration read in one module, bounded collections, skipped
+Every stack also gets `ast-grep` (pattern rules: the configuration read in one module, bounded collections, skipped
 tests without a reason, test-only branches), jscpd (duplication), typos, gitleaks and diff-cover.
 
 ## The toolbox image
@@ -128,11 +130,10 @@ tests without a reason, test-only branches), jscpd (duplication), typos, gitleak
 machines without the tools:
 
 ```sh
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work \
-  ghcr.io/rojosinalma/pawl-toolbox:latest make check
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work ghcr.io/rojosinalma/pawl-toolbox:latest make check
 ```
 
-A machine without the tools can also run the git hook in the image; set it once per clone:
+A machine without the tools can also run the git hook in the image, set it once per clone:
 
 ```sh
 git config pawl.toolbox ghcr.io/rojosinalma/pawl-toolbox:latest
