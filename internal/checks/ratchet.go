@@ -121,7 +121,7 @@ func measureDuplication(r *run) ([]string, bool, error) {
 	raw, err := os.ReadFile(filepath.Join(r.p.Root, jscpdReport))
 	if errors.Is(err, fs.ErrNotExist) {
 		if r.ring == ringNightly {
-			r.add(report.Errorf("escape.duplication", jscpdReport, 0, "the jscpd report is missing").WithFix("run `make lint` (jscpd) before `pawl check --ring nightly`"))
+			r.add(report.Errorf("escape.duplication", jscpdReport, 0, "the jscpd report is missing").WithFix("run `make lint` (jscpd) before `pawl verify --ring nightly`"))
 		} else {
 			r.rep.Skip("escape.duplication", "run `make lint` (jscpd) first")
 		}

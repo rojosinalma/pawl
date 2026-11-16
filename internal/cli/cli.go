@@ -2,12 +2,17 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,24 +20,37 @@ import (
 	"github.com/rojosinalma/pawl/internal/affected"
 	"github.com/rojosinalma/pawl/internal/catalog"
 	"github.com/rojosinalma/pawl/internal/checks"
+	"github.com/rojosinalma/pawl/internal/config"
 	"github.com/rojosinalma/pawl/internal/doctor"
 	"github.com/rojosinalma/pawl/internal/ghx"
+	"github.com/rojosinalma/pawl/internal/install"
 	"github.com/rojosinalma/pawl/internal/manifest"
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/ratchet"
 	"github.com/rojosinalma/pawl/internal/report"
+	"github.com/rojosinalma/pawl/internal/ringrun"
 	"github.com/rojosinalma/pawl/internal/rings"
 	"github.com/rojosinalma/pawl/internal/scaffold"
+	"github.com/rojosinalma/pawl/internal/toolenv"
 )
 
 // errFindings makes the process exit 1 without printing an error: the findings are already on the output.
 var errFindings = errors.New("findings")
 
+// ringNames are the rings `pawl run` accepts, from the fastest to the slowest.
+var ringNames = []string{string(catalog.Precommit), string(catalog.Check), string(catalog.Nightly)}
+
+// oldRecipeNote is printed when a v0.1 Makefile's check recipe calls `pawl check`, which is now the gate itself.
+const oldRecipeNote = `pawl: this Makefile calls "pawl check"; change the recipe to "pawl verify"`
+
 // Execute runs the command line and returns the exit code.
 func Execute(version string, args []string, stdout, stderr io.Writer) int {
+	// a cancelled context stops the ring or the install that is running, so Ctrl-C does not leave make behind
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	root := newRoot(version, stdout, stderr)
 	root.SetArgs(args)
-	if err := root.Execute(); err != nil {
+	if err := root.ExecuteContext(ctx); err != nil {
 		if !errors.Is(err, errFindings) {
 			fmt.Fprintln(stderr, "pawl:", err)
 		}
@@ -61,7 +79,7 @@ func newRoot(version string, stdout, stderr io.Writer) *cobra.Command {
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.PersistentFlags().StringVarP(&a.dir, "dir", "C", ".", "project root")
-	root.AddCommand(a.initCmd(), a.checkCmd(), a.doctorCmd(), a.statusCmd(), a.baselineCmd(), a.rulesCmd(), a.affectedCmd(), a.budgetCmd(), a.recordCmd())
+	root.AddCommand(a.initCmd(), a.installCmd(), a.runCmd(), a.checkCmd(), a.verifyCmd(), a.doctorCmd(), a.statusCmd(), a.baselineCmd(), a.rulesCmd(), a.affectedCmd(), a.budgetCmd(), a.recordCmd())
 	return root
 }
 
@@ -120,32 +138,156 @@ func (a *app) printInit(res *scaffold.Result) {
 			fmt.Fprintf(a.stdout, "  %s\n", h)
 		}
 	}
-	fmt.Fprintln(a.stdout, "\nnext: `mise install` (the pinned tools), `pawl doctor`, `make lint`, `pawl baseline` (records the debt of today), `make check`, then commit.")
+	fmt.Fprintln(a.stdout, "\nnext: `pawl install` (the pinned tools), `make lint`, `pawl baseline` (records the debt of today), `pawl check`, then commit.")
 }
 
-func (a *app) checkCmd() *cobra.Command {
-	var ring, format string
-	var only []string
+func (a *app) installCmd() *cobra.Command {
+	var opts install.Options
 	cmd := &cobra.Command{
-		Use:   "check",
-		Short: "Verify the catalog: manifest, targets, tool configurations, text checks and the ratchet",
+		Use:   "install",
+		Short: "Install mise when it is missing, the tools pinned in mise.toml and each stack's packages, then run doctor",
 		Args:  cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			p, err := project.Load(a.dir)
 			if err != nil {
 				return err
 			}
-			r, err := checks.Run(p, checks.Options{Ring: ring, Only: only})
+			opts.Stdout, opts.Stderr = a.stdout, a.stderr
+			res, err := install.Run(cmd.Context(), p, opts)
 			if err != nil {
 				return err
 			}
-			return a.emit(r, format)
+			a.printSteps(res)
+			fmt.Fprintln(a.stdout)
+			r, err := doctor.Run(p)
+			if err != nil {
+				return err
+			}
+			if err := a.emit(r, "text"); err != nil {
+				return err
+			}
+			if res.Failed() {
+				return errFindings
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&opts.SkipMise, "no-mise", false, "leave a machine without mise alone; run only the stacks' own steps")
+	return cmd
+}
+
+// printSteps prints one line per install step; a failed step also shows the command that failed.
+func (a *app) printSteps(res *install.Result) {
+	for _, s := range res.Steps {
+		switch {
+		case s.Err != nil:
+			fmt.Fprintf(a.stdout, "FAILED  %s: %v\n", s.Name, s.Err)
+			if len(s.Command) > 0 {
+				fmt.Fprintf(a.stdout, "        $ %s\n", strings.Join(s.Command, " "))
+			}
+		case s.Skipped != "":
+			fmt.Fprintf(a.stdout, "skipped %s: %s\n", s.Name, s.Skipped)
+		default:
+			fmt.Fprintf(a.stdout, "ok      %s\n", s.Name)
+		}
+	}
+}
+
+// ringFlags are the options `pawl run` and `pawl check` share.
+func ringFlags(cmd *cobra.Command, opts *ringrun.Options) {
+	cmd.Flags().BoolVar(&opts.Verbose, "verbose", false, "stream make's own output instead of the summary")
+	cmd.Flags().BoolVar(&opts.NoToolbox, "no-toolbox", false, "run make on this machine even when git config pawl.toolbox names an image")
+}
+
+func (a *app) runCmd() *cobra.Command {
+	var opts ringrun.Options
+	cmd := &cobra.Command{
+		Use:   "run <ring>",
+		Short: "Run a ring (" + strings.Join(ringNames, ", ") + ") through make, with the pinned tools on PATH",
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != 1 || !slices.Contains(ringNames, args[0]) {
+				return fmt.Errorf("pawl run takes one ring: %s", strings.Join(ringNames, ", "))
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return a.runRing(cmd.Context(), args[0], opts)
+		},
+	}
+	ringFlags(cmd, &opts)
+	return cmd
+}
+
+func (a *app) checkCmd() *cobra.Command {
+	var opts ringrun.Options
+	cmd := &cobra.Command{
+		Use:   "check",
+		Short: "The merge gate: lint, tests and the catalog verification (pawl run check)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// A v0.1 Makefile's check recipe calls `pawl check`; running the gate from there would start make again
+			// and never end. Inside make the recipe wants the verification, so it gets it, with a note to fix it.
+			if config.InsideMake() {
+				fmt.Fprintln(a.stderr, oldRecipeNote)
+				return a.verify(string(catalog.Check), nil, "text")
+			}
+			return a.runRing(cmd.Context(), string(catalog.Check), opts)
+		},
+	}
+	ringFlags(cmd, &opts)
+	return cmd
+}
+
+// runRing runs one ring with the project's pinned tools on PATH; a failing ring is exit code 1 without an error
+// line, since the runner already printed what failed.
+func (a *app) runRing(ctx context.Context, ring string, opts ringrun.Options) error {
+	p, err := project.Load(a.dir)
+	if err != nil {
+		return err
+	}
+	env, err := toolenv.Environ(ctx, p.Root)
+	if err != nil {
+		return err
+	}
+	opts.Environ, opts.Stdout, opts.Stderr = env, a.stdout, a.stderr
+	passed, err := ringrun.Run(ctx, p, ring, opts)
+	if err != nil {
+		return err
+	}
+	if !passed {
+		return errFindings
+	}
+	return nil
+}
+
+func (a *app) verifyCmd() *cobra.Command {
+	var ring, format string
+	var only []string
+	cmd := &cobra.Command{
+		Use:   "verify",
+		Short: "Verify the catalog: manifest, targets, tool configurations, text checks and the ratchet",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return a.verify(ring, only, format)
 		},
 	}
 	cmd.Flags().StringVar(&ring, "ring", "check", "precommit (staged files, fast), check, or nightly")
 	cmd.Flags().StringSliceVar(&only, "only", nil, "limit the run to these rule ids")
 	cmd.Flags().StringVar(&format, "format", "text", "text, json, sarif or github")
 	return cmd
+}
+
+// verify runs the catalog verification and writes its report.
+func (a *app) verify(ring string, only []string, format string) error {
+	p, err := project.Load(a.dir)
+	if err != nil {
+		return err
+	}
+	r, err := checks.Run(p, checks.Options{Ring: ring, Only: only})
+	if err != nil {
+		return err
+	}
+	return a.emit(r, format)
 }
 
 func (a *app) doctorCmd() *cobra.Command {

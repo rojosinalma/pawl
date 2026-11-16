@@ -24,3 +24,14 @@ func TestValuesAreRead(t *testing.T) {
 		t.Error("only 1 turns the full run on")
 	}
 }
+
+func TestInsideMakeFollowsMakeLevel(t *testing.T) {
+	t.Setenv("MAKELEVEL", "")
+	if InsideMake() {
+		t.Error("an empty MAKELEVEL is outside make")
+	}
+	t.Setenv("MAKELEVEL", "1")
+	if !InsideMake() {
+		t.Error("MAKELEVEL=1 is inside make")
+	}
+}

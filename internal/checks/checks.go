@@ -1,4 +1,4 @@
-// Package checks is the catalog verification behind `pawl check`: the manifest against the catalog, the make
+// Package checks is the catalog verification behind `pawl verify`: the manifest against the catalog, the make
 // targets, the adapters' configuration verifiers, pawl's own text checks, and the ratchet against the base commit.
 package checks
 
@@ -24,7 +24,7 @@ type Options struct {
 	// Ring is "" or "check" for the full verification, "precommit" for the fast checks on staged files, "nightly"
 	// for the full verification plus the nightly-only rules.
 	Ring string
-	// Only limits the run to these rule ids (used by make recipes such as `pawl check --only escape.duplication`).
+	// Only limits the run to these rule ids (used by make recipes such as `pawl verify --only escape.duplication`).
 	Only []string
 }
 
@@ -94,7 +94,7 @@ func Measure(p *project.Project) (*ratchet.Current, error) {
 // want reports whether the Only filter admits the rule.
 func (r *run) want(rule string) bool { return r.only == nil || r.only[rule] }
 
-// waived reports whether the manifest waives the rule; a waived rule's pawl check does not run.
+// waived reports whether the manifest waives the rule; a waived rule's pawl verify does not run.
 func (r *run) waived(rule string) bool { return r.p.Manifest.Rules[rule].Waived != "" }
 
 // enforced reports whether the manifest backs the rule with a step.

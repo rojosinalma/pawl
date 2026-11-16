@@ -320,7 +320,7 @@ func (Adapter) Make(p stack.Params) stack.Make {
 	}
 }
 
-const ruffConfig = `# Ruff configuration written by pawl (lint and format). Project-owned: change the selection here; pawl check
+const ruffConfig = `# Ruff configuration written by pawl (lint and format). Project-owned: change the selection here; pawl verify
 # verifies that the rule sets the catalog needs stay selected (or are waived in pawl.toml with a reason).
 line-length = 100
 indent-width = 4

@@ -9,7 +9,7 @@ abstract quality catalog, and makes the numbers that matter move one way only.
 2. **Adapters** per stack (Go, TypeScript, Ruby, Python, Shell with Docker and GitHub Actions, Rust) that know which
    native tool enforces each rule, how its configuration must look, and how to verify that configuration.
 3. A **manifest** (`pawl.toml`) in every project: each catalog rule is either enforced by a named step or waived with a
-   reason. `pawl check` fails when a rule has neither. "Tools over prose" is itself a check.
+   reason. `pawl verify` fails when a rule has neither. "Tools over prose" is itself a check.
 4. A **ratchet**: a baseline of counts (suppressions, oversized files, duplicated blocks) that may only shrink.
 5. **make** as the entry point. `make check`, `make fmt`, `make lint`, `make test`, `make precommit`: the same names in
    every repository, the body per stack, written by `pawl init` and owned by the project afterwards. pawl verifies
@@ -91,7 +91,7 @@ the tools and rules that implement it) or `waived` (a reason). In a project with
 when any stack enforces it; the stacks without a tool for it are listed as `gaps`, each with its reason, so a partial
 enforcement is never presented as a whole one.
 
-`pawl check` verifies: the manifest lists every catalog rule; every step is a make target; every `via` with a known
+`pawl verify` verifies: the manifest lists every catalog rule; every step is a make target; every `via` with a known
 verifier is really enabled in the tool's configuration (a `.golangci.yml` that disables `errcheck` fails
 `code.dropped-results` unless the rule is waived or the project names another tool in `via`); every waiver has a
 reason.
@@ -105,7 +105,7 @@ reason.
   "offenders": { "code.file-size": ["internal/legacy/big.go"] } }
 ```
 
-`pawl check` computes the current values and compares them with the baseline at the base commit (the merge base with
+`pawl verify` computes the current values and compares them with the baseline at the base commit (the merge base with
 `base`; the working-tree file when there is none). A value above the baseline fails ("regression"). A value below fails
 too ("stale: run `pawl baseline` to record the improvement"), so the baseline only shrinks. `pawl baseline` writes the
 current values; `pawl baseline --grow "<reason>"` is the only way up, and the reason is kept in the file.
@@ -120,7 +120,7 @@ blocks (jscpd), `TODO` without a link.
 | Ring | Runs | Where | Target / limit |
 |---|---|---|---|
 | precommit | `make precommit`: format staged files, lint staged files, forbidden names, suppressions on staged files | `.githooks/pre-commit` (`core.hooksPath`) | 10 s / 20 s |
-| check | `make check`: lint, affected tests, `pawl check` | pull request workflow; `merge_group` when a queue exists | 10 min / 15 min |
+| check | `make check`: lint, affected tests, `pawl verify` | pull request workflow; `merge_group` when a queue exists | 10 min / 15 min |
 | nightly | `make check` with everything, plus mutation, audits, docs drift | nightly workflow on `main`; failures open issues | 20 min / 30 min |
 
 The hook records its wall time locally; the CI rings are read from the last ten completed runs on `main` through the
@@ -136,7 +136,7 @@ metadata`), per changed file for the others, everything when a configuration, lo
 | Command | Does |
 |---|---|
 | `pawl init` | detect stacks; write `pawl.toml`, the tool configurations that are missing, the make targets that are missing, `.githooks/pre-commit`, `.pawl/` (ast-grep pack, baseline), the workflows, the `AGENTS.md` block, `.gitignore` lines; print the waived rules to decide on |
-| `pawl check` | the catalog verification: manifest, targets, verifiers, text checks, ratchet; `--ring precommit` limits it to the fast checks on staged files; `--format text\|json\|sarif\|github` |
+| `pawl verify` | the catalog verification: manifest, targets, verifiers, text checks, ratchet; `--ring precommit` limits it to the fast checks on staged files; `--format text\|json\|sarif\|github` |
 | `pawl doctor` | every tool pinned and present at the pinned version; hook installed; `make` targets exist; `gh` present |
 | `pawl status` | the state of the current branch's pull request: failing check, the first file and line, the command that fixes it |
 | `pawl baseline` | record the current ratchet values (shrink); `--grow "reason"` to raise |
@@ -212,7 +212,7 @@ manifest.
 11. The merge queue is a repository setting. The generated check workflow triggers on `merge_group` so a queue works
     where the repository has one.
 12. `pawl init` never overwrites: a file that exists is kept, a Makefile gains only missing targets, an existing
-    `core.hooksPath` stays. What the existing configuration does not enforce shows up in `pawl check`.
+    `core.hooksPath` stays. What the existing configuration does not enforce shows up in `pawl verify`.
 13. This repository's own dependencies are kept current by Dependabot (Go modules, actions, the toolbox base images).
     Dependabot does not read `mise.toml`; those pins are bumped by hand and re-locked.
 

@@ -214,7 +214,7 @@ func (Adapter) Make(stack.Params) stack.Make {
 	}
 }
 
-const golangciConfig = `# golangci-lint v2 configuration written by pawl. Project-owned: change thresholds and rules here; pawl check
+const golangciConfig = `# golangci-lint v2 configuration written by pawl. Project-owned: change thresholds and rules here; pawl verify
 # verifies that the rules the catalog needs stay on (or are waived in pawl.toml with a reason).
 version: "2"
 

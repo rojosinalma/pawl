@@ -11,7 +11,7 @@ import (
 const minimalMakefile = `PAWL ?= pawl
 
 check: lint test
-	$(PAWL) check
+	$(PAWL) verify
 
 fmt:
 	gofmt -w .
@@ -26,7 +26,7 @@ test:
 	go test $(SCOPE)
 
 precommit:
-	$(PAWL) check --ring precommit
+	$(PAWL) verify --ring precommit
 
 coverage:
 	go test -cover ./...
@@ -38,7 +38,7 @@ mutation:
 	gremlins unleash
 
 nightly: check coverage audit mutation
-	$(PAWL) check --ring nightly
+	$(PAWL) verify --ring nightly
 `
 
 func TestTargets(t *testing.T) {
@@ -52,8 +52,14 @@ func TestTargets(t *testing.T) {
 	}{
 		{"missing standard target", strings.Replace(minimalMakefile, "fmt:\n\tgofmt -w .\n", "", 1), nil,
 			"repo.targets", report.Error, "target `fmt` is missing"},
-		{"check without pawl check", strings.Replace(minimalMakefile, "\t$(PAWL) check\n", "\t@true\n", 1), nil,
-			"repo.targets", report.Error, "does not run `pawl check`"},
+		{"check without pawl verify", strings.Replace(minimalMakefile, "\t$(PAWL) verify\n", "\t@true\n", 1), nil,
+			"repo.targets", report.Error, "does not run `pawl verify`"},
+		{"check calls the old pawl check", strings.Replace(minimalMakefile, "\t$(PAWL) verify\n", "\t$(PAWL) check\n", 1), nil,
+			"repo.targets", report.Error, "target `check` calls `pawl check`"},
+		{"precommit calls the old pawl check", strings.Replace(minimalMakefile, "verify --ring precommit", "check --ring precommit", 1), nil,
+			"repo.targets", report.Error, "target `precommit` calls `pawl check`"},
+		{"nightly calls the old pawl check", strings.Replace(minimalMakefile, "$(PAWL) verify --ring nightly", "pawl check --ring nightly", 1), nil,
+			"repo.targets", report.Error, "target `nightly` calls `pawl check`"},
 		{"step is no target", minimalMakefile, func(m *manifest.Manifest) {
 			m.Rules["code.lint"] = manifest.Rule{Step: "vet", Via: []string{"golangci-lint"}}
 		}, "repo.targets", report.Error, "step `vet` (code.lint) is not a make target"},
@@ -70,6 +76,15 @@ func TestTargets(t *testing.T) {
 			}
 			requireFinding(t, f.check("check"), tc.rule, tc.sev, tc.want)
 		})
+	}
+}
+
+func TestOldCheckRecipeIsOneFindingWithTheFix(t *testing.T) {
+	f := newFixture(t, false)
+	f.write("Makefile", strings.Replace(minimalMakefile, "\t$(PAWL) verify\n", "\t$(PAWL) check\n", 1))
+	got := find(f.check("check", "repo.targets"), "repo.targets", "")
+	if len(got) != 1 || got[0].Fix != `replace "check" with "verify" in the recipe` {
+		t.Errorf("an old check recipe: %+v", got)
 	}
 }
 

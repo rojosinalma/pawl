@@ -2,7 +2,6 @@ package scaffold
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -46,6 +45,7 @@ func TestInitGoShellEndToEnd(t *testing.T) {
 		"baseline":  checkBaseline,
 		"manifest":  checkManifest,
 		"hints":     checkHints,
+		"makefile":  checkMakefile,
 	} {
 		t.Run(name, func(t *testing.T) { check(t, dir, res) })
 	}
@@ -64,7 +64,7 @@ func checkHook(t *testing.T, dir string, _ *Result) {
 	if st.Mode().Perm()&0o111 == 0 {
 		t.Errorf("hook mode %v is not executable", st.Mode())
 	}
-	assertContains(t, "hook", readFile(t, dir, hookPath), "set -eu", "make precommit", `"${PAWL:-pawl}" record precommit`, `exit "${status}"`)
+	assertContains(t, "hook", readFile(t, dir, hookPath), "set -eu", `exec "${PAWL:-pawl}" run precommit`, "git config pawl.toolbox")
 	if got := runIn(t, dir, "git", "config", "core.hooksPath"); got != hooksDir {
 		t.Errorf("core.hooksPath = %q", got)
 	}
@@ -86,8 +86,8 @@ func checkWorkflows(t *testing.T, dir string, _ *Result) {
 		"jdx/mise-action@"+actions["jdx/mise-action"].SHA,
 		"releases/download/v1.2.3/pawl_1.2.3_linux_amd64.tar.gz", "name: Install pawl",
 		"run: make check", "run: make coverage", "PAWL_BASE: origin/${{ github.base_ref || 'main' }}",
-		"if: failure()", "pawl check --format github", "timeout-minutes: 30")
-	assertLacks(t, "check.yml", check, "setup-ruby", "setup-uv", "setup-bun", "rustup")
+		"if: failure()", "pawl verify --format github", "timeout-minutes: 30")
+	assertLacks(t, "check.yml", check, "setup-ruby", "setup-uv", "setup-bun", "rustup", "pawl check")
 	nightly := readFile(t, dir, ".github/workflows/nightly.yml")
 	assertContains(t, "nightly.yml", nightly, `cron: "17 3 * * *"`, "workflow_dispatch", "run: make nightly", `PAWL_FULL: "1"`,
 		"issues: write", "GH_TOKEN: ${{ github.token }}", "TITLE: nightly failed", "gh issue create")
@@ -99,13 +99,20 @@ func checkWorkflows(t *testing.T, dir string, _ *Result) {
 	}
 }
 
+func checkMakefile(t *testing.T, dir string, _ *Result) {
+	t.Helper()
+	mk := readFile(t, dir, "Makefile")
+	assertContains(t, "Makefile", mk, "\t$(PAWL) verify\n", "\t$(PAWL) verify --ring precommit\n", "\t$(PAWL) verify --ring nightly\n")
+	assertLacks(t, "Makefile", mk, "$(PAWL) check")
+}
+
 func checkAgents(t *testing.T, dir string, _ *Result) {
 	t.Helper()
 	agents := readFile(t, dir, agentsFile)
 	if !strings.HasPrefix(agents, "# demo\n\n"+agentsBegin) {
 		t.Errorf("AGENTS.md starts wrong:\n%s", agents)
 	}
-	assertContains(t, "AGENTS.md", agents, "## Quality gate", "`make check` is the merge gate", "`pawl rules show <id>`",
+	assertContains(t, "AGENTS.md", agents, "## Quality gate", "`make check` is the merge gate", "`pawl verify`", "`pawl check` runs it", "`pawl rules show <id>`",
 		"never disable a linter rule", "## Review checklist", "## Not enforced here", agentsEnd)
 	assertLacks(t, "AGENTS.md", agents, "AGENTS.local.md")
 	cat, err := catalog.Load()
@@ -157,32 +164,19 @@ func checkHints(t *testing.T, _ string, res *Result) {
 	}
 }
 
-func TestHookRunsMakeAndRecords(t *testing.T) {
+func TestHookHandsTheRingToPawl(t *testing.T) {
 	dir := goShellProject(t, true)
 	mustInit(t, dir, Options{})
 	fake := filepath.Join(dir, "fake-pawl")
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/recorded\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/called\"\nexit 3\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct {
-		recipe string
-		status int
-	}{{"true", 0}, {"exit 3", 2}} {
-		if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("precommit:\n\t"+tc.recipe+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		cmd := execHook(t, dir, fake)
-		err := cmd.Run()
-		code := 0
-		if err != nil {
-			code = cmd.ProcessState.ExitCode()
-		}
-		if code != tc.status {
-			t.Errorf("recipe %q: hook exit %d, want %d (%v)", tc.recipe, code, tc.status, err)
-		}
-		if got := strings.TrimSpace(readFile(t, dir, "recorded")); !strings.HasPrefix(got, "record precommit ") {
-			t.Errorf("recorded %q", got)
-		}
+	cmd := execHook(t, dir, fake)
+	if err := cmd.Run(); err == nil || cmd.ProcessState.ExitCode() != 3 {
+		t.Errorf("the hook must exit with pawl's status 3, got %v", err)
+	}
+	if got := strings.TrimSpace(readFile(t, dir, "called")); got != "run precommit" {
+		t.Errorf("the hook called pawl with %q", got)
 	}
 }
 
@@ -363,31 +357,5 @@ func TestPawlURL(t *testing.T) {
 func TestUsesUnknownAction(t *testing.T) {
 	if _, err := uses("someone/unpinned"); err == nil {
 		t.Error("an unpinned action rendered")
-	}
-}
-
-func TestHookRunsTheRingInTheToolboxWhenTheCloneNamesOne(t *testing.T) {
-	dir := goShellProject(t, true)
-	mustInit(t, dir, Options{})
-	if err := gitCmd(t, dir, "config", "pawl.toolbox", "example.com/toolbox:1").Run(); err != nil {
-		t.Fatal(err)
-	}
-	bin := t.TempDir()
-	fakeDocker := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"" + filepath.Join(bin, "args") + "\"\nexit 7\n"
-	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(fakeDocker), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.CommandContext(t.Context(), filepath.Join(dir, hookPath))
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	err := cmd.Run()
-	if err == nil || cmd.ProcessState.ExitCode() != 7 {
-		t.Fatalf("the hook must exit with the container's status 7, got %v", err)
-	}
-	args := readFile(t, bin, "args")
-	for _, want := range []string{"run", "--rm", "example.com/toolbox:1", dir + ":/work", "make precommit"} {
-		if !strings.Contains(args, want) {
-			t.Errorf("docker arguments lack %q:\n%s", want, args)
-		}
 	}
 }

@@ -3,6 +3,7 @@ package makefile
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ deps:
 
 # the gate
 check: lint test
-	pawl check
+	pawl verify
 
 lint: fmt-check
 	golangci-lint run
@@ -63,7 +64,7 @@ func TestReaches(t *testing.T) {
 	}{
 		{"check", "lint", true},
 		{"check", "fmt-check", true},
-		{"check", "pawl check", true},
+		{"check", "pawl verify", true},
 		{"check", "deps", false},
 		{"lint", "lint", false},
 		{"check", "golangci-lint run", true},
@@ -112,8 +113,13 @@ func TestGenerateHasEveryTargetAndParses(t *testing.T) {
 			t.Errorf("generated Makefile lacks %s", target)
 		}
 	}
-	if !m.Reaches("check", "lint") || !m.Reaches("check", "$(PAWL) check") || !m.Reaches("nightly", "coverage") {
+	if !m.Reaches("check", "lint") || !m.Reaches("check", "$(PAWL) verify") || !m.Reaches("nightly", "coverage") {
 		t.Error("generated dependency graph is wrong")
+	}
+	for target, want := range map[string]string{"check": "$(PAWL) verify", "precommit": "$(PAWL) verify --ring precommit", "nightly": "$(PAWL) verify --ring nightly"} {
+		if got := m.Targets[target].Recipe; !slices.Contains(got, want) {
+			t.Errorf("%s recipe %v lacks %q", target, got, want)
+		}
 	}
 	if m.Vars["PAWL_BASE"] != "origin/main" || m.Vars["DIFF_COVERAGE"] != "80" || m.Vars["FAKE"] != "fake" {
 		t.Errorf("Vars = %v", m.Vars)
@@ -157,7 +163,7 @@ func TestMergeAddsOnlyMissingTargets(t *testing.T) {
 func TestRecipesFollowsDependencies(t *testing.T) {
 	m := Parse(sample)
 	got := strings.Join(m.Recipes("check"), "\n")
-	for _, want := range []string{"pawl check", "golangci-lint run", "gofmt -l .", "$(GO) test ./..."} {
+	for _, want := range []string{"pawl verify", "golangci-lint run", "gofmt -l .", "$(GO) test ./..."} {
 		if !strings.Contains(got, want) {
 			t.Errorf("Recipes(check) lacks %q:\n%s", want, got)
 		}

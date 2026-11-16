@@ -64,7 +64,7 @@ func writeHook(p *project.Project, w *writer) error {
 	// A project that already points core.hooksPath somewhere else (husky, lefthook) keeps its setup: init never
 	// replaces what exists. The hint says how to switch.
 	if current := p.Repo.HooksPath(); current != "" && current != hooksDir {
-		w.res.Hints = append(w.res.Hints, fmt.Sprintf("core.hooksPath is %q; run `git config core.hooksPath %s`, or call `make precommit` from your own hook", current, hooksDir))
+		w.res.Hints = append(w.res.Hints, fmt.Sprintf("core.hooksPath is %q; run `git config core.hooksPath %s`, or call `pawl run precommit` from your own hook", current, hooksDir))
 		return nil
 	}
 	if err := p.Repo.SetHooksPath(hooksDir); err != nil {

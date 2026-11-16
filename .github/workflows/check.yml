@@ -42,4 +42,4 @@ jobs:
         run: make coverage
       - name: Annotate the findings
         if: failure()
-        run: ./pawl check --format github
+        run: ./pawl verify --format github

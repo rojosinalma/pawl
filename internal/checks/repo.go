@@ -27,7 +27,10 @@ var (
 	makeRe       = regexp.MustCompile(`(^|[\s;&|(])make(\s|$)`)
 )
 
-// checkHook verifies repo.hook: the hook exists, is executable, runs `make precommit`, and git uses its directory.
+// hookRuns are the calls a hook may hand the ring to; `pawl run precommit` first, since it is what pawl init writes.
+var hookRuns = []string{"run precommit", "make precommit"}
+
+// checkHook verifies repo.hook: the hook exists, is executable and runs the precommit ring.
 func (r *run) checkHook() error {
 	const rule = "repo.hook"
 	if !r.active(rule) {
@@ -37,19 +40,29 @@ func (r *run) checkHook() error {
 	info, err := os.Stat(filepath.Join(r.p.Root, hookFile))
 	if err != nil {
 		r.add(report.Errorf(rule, hookFile, 0, "the pre-commit hook is missing").
-			WithFix("run `pawl init`; it writes the hook that runs `make precommit`"))
+			WithFix("run `pawl init`; it writes the hook that runs `pawl run precommit`"))
 	} else {
 		if info.Mode().Perm()&0o111 == 0 {
 			r.add(report.Errorf(rule, hookFile, 0, "the hook is not executable").WithFix("chmod +x " + hookFile))
 		}
-		if !strings.Contains(readOptional(r.p.Root, hookFile), "make precommit") {
-			r.add(report.Errorf(rule, hookFile, 0, "the hook does not run `make precommit`").
-				WithFix("add the line `make precommit` to " + hookFile))
+		if !runsRing(readOptional(r.p.Root, hookFile)) {
+			r.add(report.Errorf(rule, hookFile, 0, "the hook runs neither `pawl run precommit` nor `make precommit`").
+				WithFix("add the line `pawl run precommit` to " + hookFile))
 		}
 	}
 	// Whether this clone points core.hooksPath at the hook is a property of the machine, not of the repository:
 	// `pawl doctor` checks it. A fresh CI checkout never has it set.
 	return nil
+}
+
+// runsRing reports whether the hook's text hands the commit to the precommit ring.
+func runsRing(hook string) bool {
+	for _, call := range hookRuns {
+		if strings.Contains(hook, call) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkPins verifies repo.pinned: every active stack with files in the tree records its toolchain version and

@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	// pawlCheckRe finds `pawl check` in a recipe, called directly or through the PAWL variable.
-	pawlCheckRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+check\b`)
+	// pawlVerifyRe finds `pawl verify` in a recipe, called directly or through the PAWL variable.
+	pawlVerifyRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+verify\b`)
+	// pawlOldCheckRe finds the v0.1 call `pawl check`, which named the verification and now names the gate.
+	pawlOldCheckRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+check\b`)
 	// pawlAffectedRe finds `pawl affected` in a recipe or a variable the recipe expands.
 	pawlAffectedRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+affected\b`)
 	// makeVarRe finds variable references in make syntax.
@@ -22,7 +24,7 @@ var (
 // maxVarDepth bounds the variable expansion so a recursive definition cannot loop.
 const maxVarDepth = 8
 
-// checkTargets verifies repo.targets: the standard targets, `check` reaching `pawl check`, and every step named by
+// checkTargets verifies repo.targets: the standard targets, `check` reaching `pawl verify`, and every step named by
 // an enforced rule being a target reachable from `check` or `nightly`.
 func (r *run) checkTargets() error {
 	const rule = "repo.targets"
@@ -43,12 +45,29 @@ func (r *run) checkTargets() error {
 		r.add(report.Errorf(rule, mk.Path, 0, "target `%s` is missing", t).
 			WithFix("add the target, or run `pawl init`; it adds missing targets and keeps existing ones"))
 	}
-	if mk.Has("check") && !recipeMatches(mk, "check", pawlCheckRe, false) {
-		r.add(report.Errorf(rule, mk.Path, mk.Targets["check"].Line, "target `check` does not run `pawl check`").
-			WithFix("add the recipe line `$(PAWL) check` to the check target"))
+	old := r.checkOldCalls(mk)
+	if mk.Has("check") && !old["check"] && !recipeMatches(mk, "check", pawlVerifyRe, false) {
+		r.add(report.Errorf(rule, mk.Path, mk.Targets["check"].Line, "target `check` does not run `pawl verify`").
+			WithFix("add the recipe line `$(PAWL) verify` to the check target"))
 	}
 	r.checkSteps(mk)
 	return nil
+}
+
+// checkOldCalls reports the ring targets whose own recipe still calls `pawl check` for the verification and returns
+// them. Inside make `pawl check` runs the verification with a note, so such a project works until the recipe is fixed.
+func (r *run) checkOldCalls(mk *makefile.Makefile) map[string]bool {
+	old := map[string]bool{}
+	for _, name := range []string{"check", "precommit", "nightly"} {
+		t, ok := mk.Targets[name]
+		if !ok || !recipeLinesMatch(mk, t.Recipe, pawlOldCheckRe, false) {
+			continue
+		}
+		old[name] = true
+		r.add(report.Errorf("repo.targets", mk.Path, t.Line, "target `%s` calls `pawl check`, which is now the gate; the verification is `pawl verify`", name).
+			WithFix(`replace "check" with "verify" in the recipe`))
+	}
+	return old
 }
 
 // checkSteps reports every step of an enforced rule that is no target or is not reached by check or nightly.

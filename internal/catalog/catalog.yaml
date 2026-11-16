@@ -115,14 +115,14 @@ rules:
     ring: check
     generic: true
     title: "The pre-commit hook is installed"
-    statement: "`.githooks/pre-commit` exists, is executable, runs `make precommit`, and `core.hooksPath` points at it."
+    statement: "`.githooks/pre-commit` exists, is executable, runs `pawl run precommit` or `make precommit`, and `core.hooksPath` points at it."
 
   - id: repo.targets
     class: repo
     ring: check
     generic: true
     title: "The standard make targets exist"
-    statement: "`make check`, `make fmt`, `make lint`, `make test` and `make precommit` exist; `make check` runs `pawl check`."
+    statement: "`make check`, `make fmt`, `make lint`, `make test` and `make precommit` exist; `make check` runs `pawl verify`."
 
   - id: repo.ci-shape
     class: repo

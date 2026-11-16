@@ -242,7 +242,7 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	lintSteps := stepNames("lint", lintLines, g.stepNames())
 	g.header(lintSteps, p.Exclude, diffCoverage, base)
 
-	g.rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{"$(PAWL) check"})
+	g.rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{"$(PAWL) verify"})
 	g.rule("fmt", "rewrite files with the formatters", nil, g.collect(func(f stack.Make) []string { return f.Fmt }))
 	g.rule("fmt-check", "fail when a file is not formatted", nil, g.collect(func(f stack.Make) []string { return f.FmtCheck }))
 	// one target per linter, so `make -k lint` reports every tool's findings instead of stopping at the first
@@ -251,11 +251,11 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 		g.rule(name, "one step of lint", nil, []string{lintLines[i]})
 	}
 	g.rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, g.collect(func(f stack.Make) []string { return f.Test }))
-	g.rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, g.collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) check --ring precommit"})
+	g.rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, g.collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) verify --ring precommit"})
 	g.rule("coverage", "tests with coverage; changed lines must reach DIFF_COVERAGE percent", nil, g.collect(func(f stack.Make) []string { return f.Coverage }))
 	g.rule("audit", "dependency vulnerability audits", nil, g.collect(func(f stack.Make) []string { return f.Audit }))
 	g.rule("mutation", "mutation testing on the change (nightly)", nil, g.collect(func(f stack.Make) []string { return f.Mutation }))
-	g.rule("nightly", "everything, including the slow rings", []string{"check", "coverage", "audit", "mutation"}, []string{"$(PAWL) check --ring nightly", "$(PAWL) budget"})
+	g.rule("nightly", "everything, including the slow rings", []string{"check", "coverage", "audit", "mutation"}, []string{"$(PAWL) verify --ring nightly", "$(PAWL) budget"})
 	return g.b.String()
 }
 

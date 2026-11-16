@@ -26,7 +26,7 @@ BATS_FILES := $(filter %.bats,$(SH_FILES))
 STAGED_SH := $(filter $(SH_FILES),$(STAGED))
 
 check: lint test  ## the merge gate: lint, tests, then the catalog verification
-	$(PAWL) check
+	$(PAWL) verify
 
 fmt:  ## rewrite files with the formatters
 	golangci-lint fmt $(GO_PKGS)
@@ -82,7 +82,7 @@ precommit:  ## staged files only, under ten seconds; run by the git hook
 	@[ -z "$(STAGED_GO)" ] || golangci-lint run --fast-only $(addprefix ./,$(sort $(dir $(STAGED_GO))))
 	@[ -z "$(STAGED_SH)" ] || shfmt -d $(STAGED_SH)
 	@[ -z "$(STAGED_SH)" ] || shellcheck $(STAGED_SH)
-	$(PAWL) check --ring precommit
+	$(PAWL) verify --ring precommit
 
 coverage:  ## tests with coverage; changed lines must reach DIFF_COVERAGE percent
 	@mkdir -p $(REPORTS)
@@ -97,7 +97,7 @@ mutation:  ## mutation testing on the change (nightly)
 	gremlins unleash --threshold-efficacy $(MUTATION_SCORE)
 
 nightly: check coverage audit mutation  ## everything, including the slow rings
-	$(PAWL) check --ring nightly
+	$(PAWL) verify --ring nightly
 	$(PAWL) budget
 
 # --- this repository's own targets ---

@@ -74,7 +74,7 @@ func TestRulesListsShowsAndSyncs(t *testing.T) {
 	}
 }
 
-func TestBaselineThenCheckPassOnAFreshInit(t *testing.T) {
+func TestBaselineThenVerifyPassOnAFreshInit(t *testing.T) {
 	root := initRepo(t)
 	testrepo.Git(t, root, "add", "-A")
 	testrepo.Git(t, root, "commit", "-q", "--no-verify", "-m", "pawl init")
@@ -83,16 +83,16 @@ func TestBaselineThenCheckPassOnAFreshInit(t *testing.T) {
 		t.Fatalf("baseline (%d): %s%s", code, out, stderr)
 	}
 
-	out, stderr, code = pawl(t, root, "check", "--only", "repo.targets,repo.hook,escape.suppressions,code.file-size")
+	out, stderr, code = pawl(t, root, "verify", "--only", "repo.targets,repo.hook,escape.suppressions,code.file-size")
 	if code != 0 {
-		t.Fatalf("check on a fresh init failed (%d):\n%s%s", code, out, stderr)
+		t.Fatalf("verify on a fresh init failed (%d):\n%s%s", code, out, stderr)
 	}
 	if !strings.Contains(out, "no findings") {
-		t.Errorf("check output:\n%s", out)
+		t.Errorf("verify output:\n%s", out)
 	}
 }
 
-func TestCheckReportsFindingsAndFormats(t *testing.T) {
+func TestVerifyReportsFindingsAndFormats(t *testing.T) {
 	root := goRepo(t)
 	if _, stderr, code := pawl(t, root, "init"); code != 0 {
 		t.Fatal(stderr)
@@ -100,22 +100,22 @@ func TestCheckReportsFindingsAndFormats(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, ".githooks", "pre-commit")); err != nil {
 		t.Fatal(err)
 	}
-	out, _, code := pawl(t, root, "check", "--only", "repo.hook")
+	out, _, code := pawl(t, root, "verify", "--only", "repo.hook")
 	if code != 1 || !strings.Contains(out, "repo.hook") || !strings.Contains(out, "fix:") {
-		t.Errorf("check with a missing hook (%d):\n%s", code, out)
+		t.Errorf("verify with a missing hook (%d):\n%s", code, out)
 	}
-	out, _, code = pawl(t, root, "check", "--only", "repo.hook", "--format", "json")
+	out, _, code = pawl(t, root, "verify", "--only", "repo.hook", "--format", "json")
 	if code != 1 || !strings.Contains(out, `"rule": "repo.hook"`) {
 		t.Errorf("json (%d):\n%s", code, out)
 	}
-	out, _, code = pawl(t, root, "check", "--only", "repo.hook", "--format", "github")
+	out, _, code = pawl(t, root, "verify", "--only", "repo.hook", "--format", "github")
 	if code != 1 || !strings.HasPrefix(out, "::error") {
 		t.Errorf("github (%d):\n%s", code, out)
 	}
-	if _, stderr, code := pawl(t, root, "check", "--format", "xml"); code != 1 || !strings.Contains(stderr, "unknown format") {
+	if _, stderr, code := pawl(t, root, "verify", "--format", "xml"); code != 1 || !strings.Contains(stderr, "unknown format") {
 		t.Errorf("unknown format: %d %q", code, stderr)
 	}
-	if _, stderr, code := pawl(t, root, "check", "--ring", "weekly"); code != 1 || stderr == "" {
+	if _, stderr, code := pawl(t, root, "verify", "--ring", "weekly"); code != 1 || stderr == "" {
 		t.Errorf("unknown ring: %d %q", code, stderr)
 	}
 }
@@ -145,8 +145,9 @@ func TestBaselineOnlyShrinksWithoutAReason(t *testing.T) {
 }
 
 func TestCommandsNeedAManifest(t *testing.T) {
+	t.Setenv("MAKELEVEL", "")
 	root := goRepo(t)
-	for _, args := range [][]string{{"check"}, {"doctor"}, {"status"}, {"baseline"}, {"rules"}, {"affected", "go"}, {"budget"}, {"record", "precommit", "1.5"}} {
+	for _, args := range [][]string{{"verify"}, {"check"}, {"run", "check"}, {"install"}, {"doctor"}, {"status"}, {"baseline"}, {"rules"}, {"affected", "go"}, {"budget"}, {"record", "precommit", "1.5"}} {
 		_, stderr, code := pawl(t, root, args...)
 		if code != 1 || !strings.Contains(stderr, "pawl init") {
 			t.Errorf("%v without a manifest: %d %q", args, code, stderr)
@@ -205,5 +206,56 @@ func TestResolveVersion(t *testing.T) {
 		if got := ResolveVersion(c.stamped, c.module); got != c.want {
 			t.Errorf("ResolveVersion(%q, %q) = %q, want %q", c.stamped, c.module, got, c.want)
 		}
+	}
+}
+
+func TestCheckInsideMakeVerifiesAndNamesTheOldRecipe(t *testing.T) {
+	root := initRepo(t)
+	if err := os.Remove(filepath.Join(root, ".githooks", "pre-commit")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MAKELEVEL", "1")
+	out, stderr, code := pawl(t, root, "check")
+	if code != 1 || !strings.Contains(out, "repo.hook") {
+		t.Errorf("check inside make does not run the verification (%d):\n%s", code, out)
+	}
+	if strings.TrimSpace(stderr) != `pawl: this Makefile calls "pawl check"; change the recipe to "pawl verify"` {
+		t.Errorf("check inside make: stderr %q", stderr)
+	}
+}
+
+// The runner, the tool environment and the installer are stubs until their packages land; these tests show the
+// commands reach them. Once they work, assert the real outcome here.
+func TestRunReachesTheRunner(t *testing.T) {
+	t.Setenv("MAKELEVEL", "")
+	root := initRepo(t)
+	for _, args := range [][]string{{"run", "precommit"}, {"run", "nightly", "--verbose", "--no-toolbox"}, {"check"}} {
+		if _, stderr, code := pawl(t, root, args...); code != 1 || !strings.Contains(stderr, "not implemented") {
+			t.Errorf("%v: %d %q", args, code, stderr)
+		}
+	}
+}
+
+func TestInstallReachesTheInstaller(t *testing.T) {
+	root := initRepo(t)
+	if _, stderr, code := pawl(t, root, "install", "--no-mise"); code != 1 || !strings.Contains(stderr, "install.Run: not implemented") {
+		t.Errorf("install: %d %q", code, stderr)
+	}
+}
+
+func TestRunRejectsAnUnknownRing(t *testing.T) {
+	root := initRepo(t)
+	for _, args := range [][]string{{"run", "weekly"}, {"run"}, {"run", "check", "nightly"}} {
+		_, stderr, code := pawl(t, root, args...)
+		if code != 1 || !strings.Contains(stderr, "precommit, check, nightly") {
+			t.Errorf("%v: %d %q", args, code, stderr)
+		}
+	}
+}
+
+func TestInitNamesTheNextCommands(t *testing.T) {
+	out, stderr, code := pawl(t, goRepo(t), "init")
+	if code != 0 || !strings.Contains(out, "next: `pawl install` (the pinned tools), `make lint`, `pawl baseline` (records the debt of today), `pawl check`, then commit.") {
+		t.Errorf("init (%d): %s%s", code, out, stderr)
 	}
 }

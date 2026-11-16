@@ -14,13 +14,22 @@ func TestHook(t *testing.T) {
 	}{
 		{"missing", func(f *fixture) { f.remove(hookFile) }, "hook is missing"},
 		{"not executable", func(f *fixture) { f.writeMode(hookFile, "#!/bin/sh\nmake precommit\n", 0o644) }, "not executable"},
-		{"no make precommit", func(f *fixture) { f.writeMode(hookFile, "#!/bin/sh\nexit 0\n", 0o755) }, "does not run `make precommit`"},
+		{"no ring", func(f *fixture) { f.writeMode(hookFile, "#!/bin/sh\nexit 0\n", 0o755) }, "runs neither `pawl run precommit` nor `make precommit`"},
+		{"the old check", func(f *fixture) { f.writeMode(hookFile, "#!/bin/sh\npawl check\n", 0o755) }, "runs neither"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t, true)
 			tc.setup(f)
 			requireFinding(t, f.check("check", "repo.hook"), "repo.hook", report.Error, tc.want)
 		})
+	}
+}
+
+func TestHookMayRunTheRingThroughPawlOrMake(t *testing.T) {
+	for _, body := range []string{"#!/bin/sh\nexec \"${PAWL:-pawl}\" run precommit\n", "#!/bin/sh\nexec make precommit\n"} {
+		f := newFixture(t, true)
+		f.writeMode(hookFile, body, 0o755)
+		requireClean(t, f.check("check", "repo.hook"))
 	}
 }
 
@@ -85,7 +94,7 @@ func TestWorkflows(t *testing.T) {
 			"jobs:\n  a:\n    steps:\n      - run: echo hi\n      - run: make nightly\n",
 			report.Warning, "calls neither make nor pawl", 4},
 		{"ring workflow by name without make", ".github/workflows/ci.yml",
-			"name: Check\njobs:\n  a:\n    steps:\n      - run: pawl check\n",
+			"name: Check\njobs:\n  a:\n    steps:\n      - run: pawl verify\n",
 			report.Error, "runs no make target", 0},
 		{"unparsable", ".github/workflows/broken.yml", "jobs: [\n", report.Error, "cannot parse", 0},
 	} {

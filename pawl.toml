@@ -1,5 +1,5 @@
 # pawl manifest: what this project does about every catalog rule. `pawl rules` explains each rule;
-# `pawl check` fails when a rule has neither a step nor a waiver. Project-owned: edit freely.
+# `pawl verify` fails when a rule has neither a step nor a waiver. Project-owned: edit freely.
 
 version = 1
 stacks = ["go", "shell"]

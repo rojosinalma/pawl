@@ -315,7 +315,7 @@ func coverageGuard(helper string) string {
 }
 
 const rubocopConfig = `# RuboCop configuration written by pawl. RuboCop's defaults implement the community Ruby Style Guide; this file
-# adds the plugins and the thresholds the catalog needs. Project-owned: override cops here; pawl check verifies that
+# adds the plugins and the thresholds the catalog needs. Project-owned: override cops here; pawl verify checks that
 # the cops the catalog needs stay on (or are waived in pawl.toml with a reason).
 plugins:
   - rubocop-performance

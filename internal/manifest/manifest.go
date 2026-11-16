@@ -296,7 +296,7 @@ func Write(root string, m *Manifest, cat *catalog.Catalog) error {
 // writeSettings writes everything above the rules: the header, the project, the budgets and the rings.
 func writeSettings(b *bytes.Buffer, m *Manifest) {
 	b.WriteString("# pawl manifest: what this project does about every catalog rule. `pawl rules` explains each rule;\n")
-	b.WriteString("# `pawl check` fails when a rule has neither a step nor a waiver. Project-owned: edit freely.\n\n")
+	b.WriteString("# `pawl verify` fails when a rule has neither a step nor a waiver. Project-owned: edit freely.\n\n")
 	fmt.Fprintf(b, "version = %d\n", m.Version)
 	fmt.Fprintf(b, "stacks = %s\n", tomlStrings(m.Stacks))
 	fmt.Fprintf(b, "base = %q\n\n", m.Base)

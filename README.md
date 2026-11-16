@@ -12,7 +12,7 @@ the time; rules that live in tooling are followed every time, at no cost in toke
    timeouts, test quality, dependency audits and more). A rule says what must hold; it never names a tool.
 2. **Adapters per stack** that name the tool for each rule and write its configuration: Go, TypeScript, Ruby, Python,
    Rust, and Shell with Docker and GitHub Actions. Each stack keeps its own native tools.
-3. **A manifest**, `pawl.toml`: every rule is enforced by a named `make` step or waived with a reason. `pawl check`
+3. **A manifest**, `pawl.toml`: every rule is enforced by a named `make` step or waived with a reason. `pawl verify`
    fails when a rule has neither, and when a tool's configuration no longer enforces what the manifest claims.
 4. **A ratchet**: suppressions, oversized files, duplicated blocks and open TODOs are counted in a baseline that may
    only shrink.
@@ -41,14 +41,14 @@ mise install     # the pinned tools of the rings (or install them your own way; 
 pawl doctor      # every tool present at its pinned version, hook active
 make lint        # the first run shows what the code owes; fix what you want to fix now
 pawl baseline    # record the rest (suppressions, duplicated blocks, oversized files): from here it only shrinks
-make check       # the merge gate: lint, tests, pawl check
+make check       # the merge gate: lint, tests, pawl verify
 ```
 
 The generated `mise.toml` pins the tools without a native pin file; the runtime of each stack stays where the
 stack keeps it (`go.mod`, `.ruby-version`, `.python-version`, `rust-toolchain.toml`).
 
 `pawl init` never overwrites a file. An existing `Makefile` gains only the targets it lacks; existing linter
-configurations stay as they are, and `pawl check` then reports which catalog rules they do not enforce.
+configurations stay as they are, and `pawl verify` then reports which catalog rules they do not enforce.
 
 Day to day:
 

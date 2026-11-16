@@ -276,7 +276,7 @@ func (Adapter) Make(p stack.Params) stack.Make {
 }
 
 const biomeConfig = `{
-  // Biome configuration written by pawl. Project-owned: change options and rules here; pawl check verifies that the
+  // Biome configuration written by pawl. Project-owned: change options and rules here; pawl verify checks that the
   // rules the catalog needs stay on (or are waived in pawl.toml with a reason).
   "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },

@@ -6,7 +6,7 @@
 // A fixture is test/fixtures/<stack>/pass or test/fixtures/<stack>/fail: a small project without any pawl file.
 // The test copies it to a temporary git repository, runs `pawl init`, then:
 //   - pass: the commands in test/fixtures/<stack>/setup (when present), then `make fmt-check lint test` must exit 0;
-//     with PAWL_E2E_CHECK=1, `pawl baseline` and `pawl check` must exit 0 too.
+//     with PAWL_E2E_CHECK=1, `pawl baseline` and `pawl verify` must exit 0 too.
 //   - fail: `make lint` must exit non-zero and its output must contain every line of
 //     test/fixtures/<stack>/fail.expect (when present), so the fixture fails for the reasons it was written for.
 package e2e
@@ -83,7 +83,7 @@ func TestFixtures(t *testing.T) {
 				if os.Getenv("PAWL_E2E_CHECK") == "1" {
 					must(t, dir, "git", "add", "-A")
 					must(t, dir, pawlBin(), "baseline")
-					must(t, dir, pawlBin(), "check")
+					must(t, dir, pawlBin(), "verify")
 				}
 			})
 		}
