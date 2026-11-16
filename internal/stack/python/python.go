@@ -137,7 +137,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 		"code.complexity":           lint("ruff/C901"),
 		"code.boundaries":           {Waived: stack.Reason("python", "no layer boundaries declared yet; declare contracts in .importlinter and set step = \"lint\"")},
 		"code.dead":                 lint("vulture"),
-		"code.dropped-results":      lint("ruff/RUF006", "ruff/B018"),
+		"code.dropped-results":      lint("ruff/RUF006", "ruff/B015", "ruff/B018"),
 		"code.swallowed-errors":     lint("ruff/BLE001", "ruff/S110", "ruff/E722"),
 		"code.debug-leftovers":      lint("ruff/T20", "ruff/ERA", "ruff/TD003"),
 		"code.naming":               lint("ruff/N"),
@@ -243,7 +243,8 @@ func (Adapter) Make(p stack.Params) stack.Make {
 	src := p.Facts["source_dir"]
 	audit := "pip-audit"
 	if p.Facts["uv"] == "true" {
-		audit = "uv export --no-hashes --format requirements-txt -o $(REPORTS)/requirements.txt && pip-audit -r $(REPORTS)/requirements.txt"
+		// the locked set without the project itself (not on PyPI); hashed, so pip-audit needs no resolver run
+		audit = "uv export --quiet --frozen --no-emit-project --format requirements-txt -o $(REPORTS)/requirements.txt && pip-audit --disable-pip -r $(REPORTS)/requirements.txt"
 	}
 	return stack.Make{
 		Vars: []string{
@@ -254,18 +255,18 @@ func (Adapter) Make(p stack.Params) stack.Make {
 		FmtCheck: []string{"ruff format --check ."},
 		Lint: []string{
 			"ruff check .",
-			"pyright",
+			run + "pyright",
 			"vulture " + src + " --min-confidence 80",
-			"deptry .",
+			"deptry " + src,
 		},
-		Test: []string{run + "pytest -p randomly $(PY_TEST_SCOPE)"},
+		Test: []string{run + "pytest $(PY_TEST_SCOPE)"},
 		Precommit: []string{
 			`@[ -z "$(STAGED_PY)" ] || ruff format --check $(STAGED_PY)`,
 			`@[ -z "$(STAGED_PY)" ] || ruff check $(STAGED_PY)`,
 		},
 		Coverage: []string{
 			"@mkdir -p $(REPORTS)",
-			run + "coverage run -m pytest -p randomly",
+			run + "coverage run --source=" + src + " -m pytest",
 			run + "coverage xml -o $(REPORTS)/python-coverage.xml",
 			"diff-cover $(REPORTS)/python-coverage.xml --compare-branch=$(PAWL_BASE) --fail-under=$(DIFF_COVERAGE)",
 		},
@@ -334,8 +335,10 @@ root_package = .
 #     mypackage.storage
 `
 
-const pytestConfig = `# pytest configuration written by pawl: random order (pytest-randomly), no retries, strict markers.
+const pytestConfig = `# pytest configuration written by pawl: random order (pytest-randomly loads itself; required_plugins fails the
+# run without it), no retries, strict markers.
 [pytest]
-addopts = -p randomly --strict-markers
+required_plugins = pytest-randomly
+addopts = --strict-markers
 testpaths = tests
 `

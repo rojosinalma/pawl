@@ -1,0 +1,22 @@
+src/greeter/format.py
+error[config-owner-py]
+error[bounded-growth-py]
+error[mock-own-module-py]
+error[skip-without-reason-py]
+error[test-branch-py]
+error[urlopen-without-timeout-py]
+C901
+S307
+T201
+S110
+BLE001
+E722
+F401
+N802
+B015
+ERA001
+TD003
+PT023
+reportMissingParameterType
+reportMatchNotExhaustive
+unreachable code after 'return'
