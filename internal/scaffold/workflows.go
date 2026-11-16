@@ -27,15 +27,25 @@ var actions = map[string]Action{
 	"oven-sh/setup-bun":  {SHA: "0c5077e51419868618aeaa5fe8019c62421857d6", Tag: "v2.2.0"},
 }
 
-// pawlRepo is where the workflows download pawl from.
+// pawlRepo is where the workflows of a development build download pawl from.
 const pawlRepo = "https://github.com/rojosinalma/pawl/releases"
 
-var releaseVersion = regexp.MustCompile(`^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$`)
+// pawlAction is pawl's setup action; a release build pins it to the commit it was built from.
+const pawlAction = "rojosinalma/pawl"
+
+var (
+	releaseVersion = regexp.MustCompile(`^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$`)
+	// stableVersion is a release the action's version input accepts: no pre-release suffix.
+	stableVersion = regexp.MustCompile(`^v?(\d+\.\d+\.\d+)$`)
+	commitSHA     = regexp.MustCompile(`^[0-9a-f]{40}$`)
+)
 
 // workflowData is what the workflow templates render from.
 type workflowData struct {
 	DefaultBranch  string
-	PawlURL        string
+	PawlUses       string // the pinned setup action; empty when the workflow downloads pawl itself
+	PawlRelease    string // the release download directory, for a build without a pinnable commit
+	PawlAsset      string // the archive in PawlRelease
 	Go             bool
 	Ruby           bool
 	UV             bool
@@ -70,7 +80,7 @@ func writeWorkflows(p *project.Project, w *writer) error {
 func newWorkflowData(p *project.Project, w *writer) workflowData {
 	d := workflowData{
 		DefaultBranch:  strings.TrimPrefix(p.Manifest.Base, "origin/"),
-		PawlURL:        pawlURL(w.version),
+		PawlUses:       pawlUses(w.version, w.commit),
 		Go:             hasStack(p, "go") && w.exists("go.mod"),
 		Ruby:           hasStack(p, "ruby"),
 		UV:             hasStack(p, "python") && p.Params.Facts["uv"] == "true",
@@ -79,6 +89,7 @@ func newWorkflowData(p *project.Project, w *writer) workflowData {
 		CheckTimeout:   timeoutMinutes(p, "check"),
 		NightlyTimeout: timeoutMinutes(p, "nightly"),
 	}
+	d.PawlRelease, d.PawlAsset = pawlDownload(w.version)
 	if d.DefaultBranch == "" {
 		d.DefaultBranch = "main"
 	}
@@ -88,13 +99,24 @@ func newWorkflowData(p *project.Project, w *writer) workflowData {
 	return d
 }
 
-// pawlURL is the release tarball of this pawl version, or the latest release for a development build.
-func pawlURL(version string) string {
+// pawlUses is the setup action pinned to the commit of a release build, whose default version is that release;
+// empty when the build has no commit or is not a release, so the action at that commit may not default to it.
+func pawlUses(version, commit string) string {
+	m := stableVersion.FindStringSubmatch(version)
+	if m == nil || !commitSHA.MatchString(commit) {
+		return ""
+	}
+	return fmt.Sprintf("%s@%s # v%s", pawlAction, commit, m[1])
+}
+
+// pawlDownload is the release directory and Linux amd64 archive of this pawl version, or of the latest release for
+// a development build; the directory also holds checksums.txt.
+func pawlDownload(version string) (release, asset string) {
 	m := releaseVersion.FindStringSubmatch(version)
 	if m == nil {
-		return pawlRepo + "/latest/download/pawl_linux_amd64.tar.gz"
+		return pawlRepo + "/latest/download", "pawl_linux_amd64.tar.gz"
 	}
-	return fmt.Sprintf("%s/download/v%s/pawl_%s_linux_amd64.tar.gz", pawlRepo, m[1], m[1])
+	return fmt.Sprintf("%s/download/v%s", pawlRepo, m[1]), fmt.Sprintf("pawl_%s_linux_amd64.tar.gz", m[1])
 }
 
 // timeoutMinutes is twice the ring's limit: the budget excludes setup, the job timeout only stops a hung run.

@@ -28,11 +28,31 @@
         run: rustup toolchain install
 [[- end]]
       - uses: [[uses "jdx/mise-action"]]
-      - name: Install pawl
+[[- if .PawlUses]]
+      - name: Set up Pawl
+        uses: [[.PawlUses]]
+[[- else]]
+      # A development build of pawl wrote this step; a release build pins the rojosinalma/pawl action instead.
+      - name: Set up Pawl
+        env:
+          PAWL_RELEASE: [[.PawlRelease]]
+          PAWL_ASSET: [[.PawlAsset]]
         run: |
-          mkdir -p "${HOME}/.local/bin"
-          curl -fsSL [[.PawlURL]] | tar -xz -C "${HOME}/.local/bin" pawl
-          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/pawl"
+          mkdir -p "${dir}/bin"
+          curl -fsSL --retry 3 -o "${dir}/${PAWL_ASSET}" "${PAWL_RELEASE}/${PAWL_ASSET}"
+          curl -fsSL --retry 3 -o "${dir}/checksums.txt" "${PAWL_RELEASE}/checksums.txt"
+          # check the archive against its own line, so a missing line fails instead of passing vacuously
+          if ! awk -v f="${PAWL_ASSET}" '$2 == f { print; found = 1 } END { exit !found }' "${dir}/checksums.txt" > "${dir}/asset.sha256"; then
+            echo "::error::checksums.txt has no line for ${PAWL_ASSET}"
+            exit 1
+          fi
+          (cd "${dir}" && sha256sum -c asset.sha256)
+          tar -xzf "${dir}/${PAWL_ASSET}" -C "${dir}/bin" pawl
+          echo "${dir}/bin" >> "${GITHUB_PATH}"
+          "${dir}/bin/pawl" --version
+[[- end]]
 [[- if .Bun]]
       - name: Install dependencies
         run: bun install --frozen-lockfile

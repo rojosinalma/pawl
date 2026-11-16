@@ -137,9 +137,41 @@ func TestRust(t *testing.T) {
 	assertContains(t, "mise.toml", readFile(t, dir, "mise.toml"), "# Rust", `"aqua:taiki-e/cargo-llvm-cov"`)
 }
 
-// TestEveryStackWorkflows renders the workflows with every setup step and checks their shape; with
-// PAWL_WORKFLOW_OUT set it also copies them there for actionlint and zizmor.
+// TestEveryStackWorkflows renders the workflows with every setup step, for a release build with a commit and for a
+// development build, and checks their shape; with PAWL_WORKFLOW_OUT set it also copies them to <out>/release and
+// <out>/dev for actionlint and zizmor.
 func TestEveryStackWorkflows(t *testing.T) {
+	const sha = "0123456789abcdef0123456789abcdef01234567"
+	for _, c := range []struct {
+		name  string
+		opts  Options
+		has   []string
+		lacks []string
+	}{
+		{"release", Options{Version: "v1.2.3", Commit: sha},
+			[]string{"name: Set up Pawl\n        uses: rojosinalma/pawl@" + sha + " # v1.2.3\n"}, []string{"curl", "PAWL_ASSET"}},
+		{"dev", Options{Version: "dev", Commit: sha}, []string{
+			"PAWL_RELEASE: https://github.com/rojosinalma/pawl/releases/latest/download\n",
+			"PAWL_ASSET: pawl_linux_amd64.tar.gz\n", `"${PAWL_RELEASE}/checksums.txt"`, "sha256sum -c asset.sha256",
+		}, []string{"rojosinalma/pawl@"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := everyStackProject(t, c.opts)
+			for _, name := range []string{"check.yml", "nightly.yml"} {
+				content := readFile(t, dir, ".github/workflows/"+name)
+				assertContains(t, name, content, append(c.has, `PAWL_REQUIRED: "1"`)...)
+				assertLacks(t, name, content, c.lacks...)
+			}
+			if out := os.Getenv("PAWL_WORKFLOW_OUT"); out != "" {
+				copyWorkflowFiles(t, dir, filepath.Join(out, c.name))
+			}
+		})
+	}
+}
+
+// everyStackProject initialises a project with all six stacks and checks every workflow and every pinned action.
+func everyStackProject(t *testing.T, opts Options) string {
+	t.Helper()
 	dir := newProject(t, true, map[string]string{
 		"go.mod":         "module example.com/demo\n\ngo 1.25\n",
 		"Gemfile":        "source 'https://rubygems.org'\n",
@@ -150,20 +182,18 @@ func TestEveryStackWorkflows(t *testing.T) {
 		"Cargo.toml":     "[package]\nname = \"demo\"\n",
 		"run.sh":         "#!/bin/sh\n",
 	})
-	res := mustInit(t, dir, Options{Version: "v0.1.0"})
+	res := mustInit(t, dir, opts)
 	if strings.Join(res.Stacks, ",") != "go,typescript,ruby,python,shell,rust" {
 		t.Fatalf("stacks = %v", res.Stacks)
 	}
 	for _, name := range workflowFiles {
 		checkWorkflow(t, name, readFile(t, dir, ".github/workflows/"+name))
 	}
-	if out := os.Getenv("PAWL_WORKFLOW_OUT"); out != "" {
-		copyWorkflowFiles(t, dir, out)
-	}
 	check := readFile(t, dir, ".github/workflows/check.yml")
 	for name := range actions {
 		assertContains(t, "check.yml", check, name+"@"+actions[name].SHA+" # "+actions[name].Tag)
 	}
+	return dir
 }
 
 // copyWorkflowFiles copies the rendered workflows, and the files they reference, from dir to out.

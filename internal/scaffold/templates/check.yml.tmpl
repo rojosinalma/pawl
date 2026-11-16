@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: [[.CheckTimeout]]
     env:
       PAWL_BASE: origin/${{ github.base_ref || '[[.DefaultBranch]]' }}
+      # Pawl is optional for make; in CI a missing Pawl is an error. Delete this line and the "Set up Pawl" step to run without Pawl.
+      PAWL_REQUIRED: "1"
     steps:[[template "setup" .]]
       - name: make check
         run: make check
@@ -34,4 +36,4 @@ jobs:
         run: make coverage
       - name: Annotate the findings
         if: failure()
-        run: pawl verify --format github
+        run: if command -v pawl >/dev/null 2>&1; then pawl verify --format github; fi

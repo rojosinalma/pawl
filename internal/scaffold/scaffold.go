@@ -17,6 +17,9 @@ type Options struct {
 	DryRun bool     // report, write nothing
 	// Version is the running pawl's version; the workflows install this release ("" or "dev": the latest one).
 	Version string
+	// Commit is the full commit SHA the running pawl was built from; with a release Version the workflows use the
+	// setup action pinned to it, otherwise they download and verify the release archive.
+	Commit string
 }
 
 // Result lists what init did.
@@ -40,7 +43,7 @@ func Init(root string, opts Options) (*Result, error) {
 		return nil, err
 	}
 	res := &Result{Stacks: p.Manifest.Stacks}
-	w := &writer{root: p.Root, dry: opts.DryRun, res: res, version: opts.Version}
+	w := &writer{root: p.Root, dry: opts.DryRun, res: res, version: opts.Version, commit: opts.Commit}
 
 	p.Manifest.Rules = p.DefaultRules()
 	res.Waived = p.Manifest.Waived(p.Catalog)
@@ -127,6 +130,7 @@ type writer struct {
 	dry     bool
 	res     *Result
 	version string // the running pawl's version, for the workflows
+	commit  string // the commit the running pawl was built from, for the workflows
 }
 
 // create writes the file when it does not exist.
