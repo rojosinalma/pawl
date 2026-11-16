@@ -15,6 +15,8 @@ import (
 type Options struct {
 	Stacks []string // override detection
 	DryRun bool     // report, write nothing
+	// Version is the running pawl's version; the workflows install this release ("" or "dev": the latest one).
+	Version string
 }
 
 // Result lists what init did.
@@ -24,6 +26,7 @@ type Result struct {
 	Kept    []string // files that existed and were left alone
 	Merged  []string // files init appended to (the Makefile, .gitignore, AGENTS.md)
 	Waived  []string // rule ids waived by default: the decisions left to the project
+	Hints   []string // commands the project still has to run (install the added dependencies)
 }
 
 // Init detects the stacks, then writes the manifest, the tool configurations, the make targets and the rest of the
@@ -37,42 +40,18 @@ func Init(root string, opts Options) (*Result, error) {
 		return nil, err
 	}
 	res := &Result{Stacks: p.Manifest.Stacks}
-	w := &writer{root: p.Root, dry: opts.DryRun, res: res}
+	w := &writer{root: p.Root, dry: opts.DryRun, res: res, version: opts.Version}
 
 	p.Manifest.Rules = p.DefaultRules()
 	res.Waived = p.Manifest.Waived(p.Catalog)
 	fillProject(p)
 
-	// tool configurations: only when missing
-	for _, a := range p.Adapters {
-		for _, c := range a.Configs(p.Params) {
-			mode := c.Mode
-			if mode == 0 {
-				mode = 0o644
-			}
-			if err := w.create(c.Path, c.Content, mode); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// the Makefile: written whole, or the missing targets appended
-	generated := makefile.Generate(p.Adapters, p.Params, p.Manifest.Budgets.DiffCoverage, p.Manifest.Base)
-	if existing, ok, err := makefile.Read(p.Root); err != nil {
-		return nil, err
-	} else if ok {
-		merged := makefile.Merge(existing.Content, generated)
-		if merged != existing.Content {
-			if err := w.overwrite(existing.Path, merged, 0o644, true); err != nil {
-				return nil, err
-			}
-		} else {
-			res.Kept = append(res.Kept, existing.Path)
-		}
-	} else if err := w.create("Makefile", generated, 0o644); err != nil {
+	if err := writeConfigs(p, w); err != nil {
 		return nil, err
 	}
-
+	if err := writeMakefile(p, w); err != nil {
+		return nil, err
+	}
 	if err := writeExtras(p, w); err != nil {
 		return nil, err
 	}
@@ -85,6 +64,40 @@ func Init(root string, opts Options) (*Result, error) {
 	}
 	res.Created = append(res.Created, manifest.FileName)
 	return res, nil
+}
+
+// writeConfigs writes the tool configurations of every active adapter that are missing.
+func writeConfigs(p *project.Project, w *writer) error {
+	for _, a := range p.Adapters {
+		for _, c := range a.Configs(p.Params) {
+			mode := c.Mode
+			if mode == 0 {
+				mode = 0o644
+			}
+			if err := w.create(c.Path, c.Content, mode); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// writeMakefile writes the Makefile whole, or appends the targets an existing one lacks.
+func writeMakefile(p *project.Project, w *writer) error {
+	generated := makefile.Generate(p.Adapters, p.Params, p.Manifest.Budgets.DiffCoverage, p.Manifest.Base)
+	existing, ok, err := makefile.Read(p.Root)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return w.create("Makefile", generated, 0o644)
+	}
+	merged := makefile.Merge(existing.Content, generated)
+	if merged == existing.Content {
+		w.res.Kept = append(w.res.Kept, existing.Path)
+		return nil
+	}
+	return w.overwrite(existing.Path, merged, 0o644, true)
 }
 
 // fillProject sets the project facts the adapters detected (own module) and conventional defaults.
@@ -110,9 +123,10 @@ func fillProject(p *project.Project) {
 
 // writer creates files under the root and records what happened.
 type writer struct {
-	root string
-	dry  bool
-	res  *Result
+	root    string
+	dry     bool
+	res     *Result
+	version string // the running pawl's version, for the workflows
 }
 
 // create writes the file when it does not exist.
