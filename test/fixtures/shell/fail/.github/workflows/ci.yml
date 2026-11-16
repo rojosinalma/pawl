@@ -1,0 +1,12 @@
+name: ci
+
+on:
+  pull_request_target:
+
+jobs:
+  greet:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Greet
+        run: echo "Hello ${{ github.event.pull_request.title }}"

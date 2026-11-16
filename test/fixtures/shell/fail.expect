@@ -1,0 +1,9 @@
+--- scripts/deploy.sh.orig
+error[shell-strict-mode]
+SC2034
+SC2086
+DL3007
+Dockerfile: no USER instruction
+[expression]
+error[template-injection]
+error[unpinned-uses]

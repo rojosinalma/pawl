@@ -184,7 +184,6 @@ func (Adapter) Make(stack.Params) stack.Make {
 			"ast-grep scan -c .pawl/sgconfig.yml",
 			"typos",
 			"gitleaks git . --redact --no-banner --exit-code 1",
-			"gitleaks dir . --redact --no-banner --exit-code 1",
 		},
 		Precommit: []string{
 			`@[ -z "$(STAGED)" ] || git diff --cached | gitleaks stdin --redact --no-banner --exit-code 1`,

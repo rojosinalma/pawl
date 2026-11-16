@@ -237,7 +237,7 @@ func keepGoing(lines []string) []string {
 	out := []string{"@rc=0; \\"}
 	for _, l := range lines {
 		l = strings.TrimLeft(l, "@-")
-		out = append(out, fmt.Sprintf("echo %s; { %s; } || rc=1; \\", shellQuote("+ "+l), l))
+		out = append(out, fmt.Sprintf("echo %s; ( %s ) || rc=1; \\", shellQuote("+ "+l), l))
 	}
 	return append(out, "exit $$rc")
 }

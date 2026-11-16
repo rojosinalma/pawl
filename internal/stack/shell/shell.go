@@ -15,6 +15,7 @@ const (
 	HadolintVersion   = "2.15.1"
 	ActionlintVersion = "1.7.12"
 	ZizmorVersion     = "1.32.0"
+	BatsVersion       = "1.14.0"
 )
 
 type Adapter struct{}
@@ -40,6 +41,7 @@ func (Adapter) Tools() []stack.Tool {
 		{Name: "shfmt", Version: ShfmtVersion, Check: []string{"shfmt", "--version"}, Mise: "shfmt", Install: "mise use shfmt@" + ShfmtVersion, Rings: []string{"precommit", "check"}},
 		{Name: "hadolint", Version: HadolintVersion, Check: []string{"hadolint", "--version"}, Mise: "hadolint", Install: "mise use hadolint@" + HadolintVersion, Rings: []string{"check"}},
 		{Name: "actionlint", Version: ActionlintVersion, Check: []string{"actionlint", "-version"}, Mise: "aqua:rhysd/actionlint", Install: "mise use aqua:rhysd/actionlint@" + ActionlintVersion, Rings: []string{"check"}},
+		{Name: "bats", Version: BatsVersion, Check: []string{"bats", "--version"}, Mise: "bats", Install: "mise use bats@" + BatsVersion, Rings: []string{"check"}},
 		{Name: "zizmor", Version: ZizmorVersion, Check: []string{"zizmor", "--version"}, Mise: "zizmor", Install: "mise use zizmor@" + ZizmorVersion, Rings: []string{"check"}},
 	}
 }
@@ -89,21 +91,24 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 		"resilience.config-owner":   waive("scripts read the environment by nature"),
 		"resilience.import-cycles":  waive("shell scripts have no import graph"),
 		"resilience.bounded-growth": waive("shell scripts hold no long-lived state"),
-		"tests.runner":              waive("no shell tests declared; bats is the runner when they exist (set step = \"test\")"),
+		"tests.runner":              {Step: "test", Via: []string{"bats"}},
 		"tests.smells":              waive("no shell tests declared"),
 		"tests.diff-coverage":       waive("no coverage tool for shell"),
 		"tests.mutation":            waive("no mutation tool for shell"),
 		"tests.mock-edges":          waive("no shell tests declared"),
 		"drift.audit":               waive("shell scripts have no dependency manifest"),
 		"drift.unused-deps":         waive("shell scripts have no dependency manifest"),
-		"drift.security":            lint("shellcheck", "zizmor"),
+		"drift.security":            lint("shellcheck", "zizmor", "hadolint", "docker-user"),
 	}
 }
 
 func (Adapter) Verifiers(stack.Params) []stack.Verifier {
 	return []stack.Verifier{
 		stack.V("code.lint", "shellcheck", stack.Exists(".shellcheckrc")),
-		stack.V("code.lint", "hadolint", stack.Exists(".hadolint.yaml"), stack.NotEqual(".hadolint.yaml", stack.YAML, "no-fail", true)),
+		stack.V("code.lint", "hadolint", stack.Exists(".hadolint.yaml"), stack.NotEqual(".hadolint.yaml", stack.YAML, "no-fail", true),
+			stack.NotEqual(".hadolint.yaml", stack.YAML, "failure-threshold", "error", "none")),
+		stack.V("drift.security", "zizmor/unpinned-uses", stack.NotEqual(".github/zizmor.yml", stack.YAML, "rules.unpinned-uses.disable", true)),
+		stack.V("drift.security", "zizmor/template-injection", stack.NotEqual(".github/zizmor.yml", stack.YAML, "rules.template-injection.disable", true)),
 		stack.V("code.format", "shfmt", stack.Exists(".editorconfig")),
 		stack.V("code.dead", "shellcheck/SC2034", stack.NotMatches(".shellcheckrc", regexp.MustCompile(`(?m)^\s*disable=.*SC2034`), "a disable line for SC2034 (unused variables)")),
 	}
@@ -116,6 +121,7 @@ func (Adapter) Make(stack.Params) stack.Make {
 			"SH_FILES := " + find,
 			"DOCKERFILES := $(shell git ls-files -co --exclude-standard | grep -E '(^|/)(Dockerfile(\\..*)?|Containerfile|.*\\.dockerfile)$$')",
 			"WORKFLOWS := $(wildcard .github/workflows/*.yml .github/workflows/*.yaml)",
+			"BATS_FILES := $(filter %.bats,$(SH_FILES))",
 			"STAGED_SH := $(filter $(SH_FILES),$(STAGED))",
 		},
 		Fmt:      []string{`@[ -z "$(SH_FILES)" ] || shfmt -w $(SH_FILES)`},
@@ -125,13 +131,19 @@ func (Adapter) Make(stack.Params) stack.Make {
 			`@[ -z "$(DOCKERFILES)" ] || hadolint $(DOCKERFILES)`,
 			`@[ -z "$(WORKFLOWS)" ] || actionlint $(WORKFLOWS)`,
 			`@[ -z "$(WORKFLOWS)" ] || zizmor --no-progress --min-severity low .github/workflows`,
+			dockerUser,
 		},
+		Test: []string{`@[ -z "$(BATS_FILES)" ] || bats $(BATS_FILES)`},
 		Precommit: []string{
 			`@[ -z "$(STAGED_SH)" ] || shfmt -d $(STAGED_SH)`,
 			`@[ -z "$(STAGED_SH)" ] || shellcheck $(STAGED_SH)`,
 		},
 	}
 }
+
+// dockerUser fails for a Dockerfile without a USER instruction (hadolint only checks the last USER is not root).
+const dockerUser = `@s=0; for f in $(DOCKERFILES); do grep -qiE '^[[:space:]]*USER[[:space:]]' "$$f" ` +
+	`|| { echo "$$f: no USER instruction, the container runs as root (docker-user)"; s=1; }; done; exit $$s`
 
 const shellcheckrc = `# ShellCheck configuration written by pawl. The optional checks follow the Google Shell Style Guide.
 external-sources=true
