@@ -1,0 +1,43 @@
+# pawl rule pack: resilience.timeouts. Every outbound call has a timeout.
+id: fetch-without-timeout-ts
+language: TypeScript
+severity: error
+message: 'fetch without options has no timeout; pass { signal: AbortSignal.timeout(ms) }.'
+rule:
+  pattern: fetch($URL)
+files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.js", "**/*.mjs"]
+ignores: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**"]
+---
+id: urlopen-without-timeout-py
+language: Python
+severity: error
+message: urlopen without a timeout can hang forever; pass timeout=.
+rule:
+  any:
+    - pattern: urlopen($URL)
+    - pattern: urllib.request.urlopen($URL)
+files: ["**/*.py"]
+ignores: ["**/test_*.py", "**/*_test.py", "**/tests/**"]
+---
+id: http-without-timeout-rb
+language: Ruby
+severity: error
+message: Net::HTTP convenience calls have no timeout; build the client with open_timeout and read_timeout.
+rule:
+  any:
+    - pattern: Net::HTTP.get($$$)
+    - pattern: Net::HTTP.get_response($$$)
+    - pattern: Net::HTTP.post_form($$$)
+files: ["**/*.rb"]
+ignores: ["**/*_test.rb", "**/*_spec.rb", "**/test/**", "**/spec/**"]
+---
+id: reqwest-without-timeout-rs
+language: Rust
+severity: error
+message: reqwest convenience calls have no timeout; build a Client with .timeout().
+rule:
+  any:
+    - pattern: reqwest::get($URL)
+    - pattern: reqwest::blocking::get($URL)
+files: ["**/*.rs"]
+ignores: ["**/tests/**"]

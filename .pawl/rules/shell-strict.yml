@@ -1,0 +1,18 @@
+# pawl rule pack: code.dropped-results for shell. A script fails on the first failing command.
+id: shell-strict-mode
+language: Bash
+severity: error
+message: The script does not set strict mode; add `set -euo pipefail` (bash) or `set -eu` (POSIX sh) after the shebang.
+# strict mode is a `set` command with errexit (-e or -o errexit) and either pipefail (bash) or nounset (-u: POSIX sh
+# has no pipefail), in any spelling (-Eeuo, -eu, -o ...)
+rule:
+  kind: program
+  not:
+    has:
+      stopBy: end
+      kind: command
+      all:
+        - regex: '^set\s'
+        - regex: '\s-[a-zA-Z]*e|errexit'
+        - regex: 'pipefail|\s-[a-zA-Z]*u|nounset'
+files: ["**/*.sh", "**/*.bash"]

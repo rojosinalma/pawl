@@ -4,6 +4,7 @@ package makefile
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rojosinalma/pawl/internal/stack"
 )
@@ -60,58 +62,69 @@ func Read(root string) (*Makefile, bool, error) {
 
 // Parse reads targets and variables from Makefile text. Recipes are the tab-indented lines after a rule.
 func Parse(content string) *Makefile {
-	m := &Makefile{Content: content, Targets: map[string]Target{}, Vars: map[string]string{}}
-	var current *Target
-	lines := strings.Split(content, "\n")
-	lastComment := ""
-	for i, line := range lines {
-		switch {
-		case strings.HasPrefix(line, "\t"):
-			if current != nil {
-				current.Recipe = append(current.Recipe, strings.TrimPrefix(line, "\t"))
-			}
-			continue
-		case strings.HasPrefix(strings.TrimSpace(line), "#"):
-			lastComment = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
-			continue
-		case strings.TrimSpace(line) == "":
-			lastComment = ""
-			if current != nil {
-				m.Targets[current.Name] = *current
-				current = nil
-			}
-			continue
-		}
-		if current != nil {
-			m.Targets[current.Name] = *current
-			current = nil
-		}
-		if mv := varRe.FindStringSubmatch(line); mv != nil && !strings.Contains(mv[1], ":") {
-			m.Vars[mv[1]] = strings.TrimSpace(mv[2])
-			continue
-		}
-		if mt := targetRe.FindStringSubmatch(line); mt != nil {
-			name := mt[1]
-			if strings.HasPrefix(name, ".") {
-				continue
-			}
-			rest := mt[2]
-			if idx := strings.Index(rest, "##"); idx >= 0 {
-				lastComment = strings.TrimSpace(rest[idx+2:])
-				rest = rest[:idx]
-			}
-			if idx := strings.Index(rest, "#"); idx >= 0 {
-				rest = rest[:idx]
-			}
-			t := Target{Name: name, Deps: strings.Fields(rest), Line: i + 1, Comment: lastComment}
-			current = &t
-			lastComment = ""
-		}
+	p := &parser{m: &Makefile{Content: content, Targets: map[string]Target{}, Vars: map[string]string{}}}
+	for i, line := range strings.Split(content, "\n") {
+		p.line(i+1, line)
 	}
-	if current != nil {
-		m.Targets[current.Name] = *current
+	p.flush()
+	return p.m
+}
+
+// parser carries the state between lines: the rule whose recipe is being read and the comment above the next rule.
+type parser struct {
+	m           *Makefile
+	current     *Target
+	lastComment string
+}
+
+func (p *parser) line(n int, line string) {
+	trimmed := strings.TrimSpace(line)
+	switch {
+	case strings.HasPrefix(line, "\t"):
+		if p.current != nil {
+			p.current.Recipe = append(p.current.Recipe, strings.TrimPrefix(line, "\t"))
+		}
+		return
+	case strings.HasPrefix(trimmed, "#"):
+		p.lastComment = strings.TrimSpace(strings.TrimPrefix(trimmed, "#"))
+		return
+	case trimmed == "":
+		p.lastComment = ""
+		p.flush()
+		return
 	}
-	return m
+	p.flush()
+	if mv := varRe.FindStringSubmatch(line); mv != nil && !strings.Contains(mv[1], ":") {
+		p.m.Vars[mv[1]] = strings.TrimSpace(mv[2])
+		return
+	}
+	if mt := targetRe.FindStringSubmatch(line); mt != nil {
+		p.target(n, mt[1], mt[2])
+	}
+}
+
+// target starts a rule; special targets such as .PHONY are not rules a project runs and are skipped.
+func (p *parser) target(n int, name, rest string) {
+	if strings.HasPrefix(name, ".") {
+		return
+	}
+	if idx := strings.Index(rest, "##"); idx >= 0 {
+		p.lastComment = strings.TrimSpace(rest[idx+2:])
+		rest = rest[:idx]
+	}
+	if idx := strings.Index(rest, "#"); idx >= 0 {
+		rest = rest[:idx]
+	}
+	p.current = &Target{Name: name, Deps: strings.Fields(rest), Line: n, Comment: p.lastComment}
+	p.lastComment = ""
+}
+
+// flush stores the rule being read, if any.
+func (p *parser) flush() {
+	if p.current != nil {
+		p.m.Targets[p.current.Name] = *p.current
+		p.current = nil
+	}
 }
 
 // Has reports whether the target exists.
@@ -202,9 +215,14 @@ func wordByte(b byte) bool {
 	return b == '-' || b == '_' || b == '.' || b == '/' || (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
+// dryRunTimeout bounds `make -n`, which only prints commands but can hang on a recursive or shell-heavy Makefile.
+const dryRunTimeout = 60 * time.Second
+
 // DryRun returns the commands `make -n target` would run; it needs make on PATH.
 func DryRun(root, target string) (string, error) {
-	cmd := exec.Command("make", "-n", "--no-print-directory", target)
+	ctx, cancel := context.WithTimeout(context.Background(), dryRunTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "make", "-n", "--no-print-directory", target)
 	cmd.Dir = root
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
@@ -216,75 +234,89 @@ func DryRun(root, target string) (string, error) {
 
 // Generate renders the standard and extra targets from the active adapters.
 func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base string) string {
-	var frags []stack.Make
+	g := &generator{}
 	for _, a := range adapters {
-		frags = append(frags, a.Make(p))
+		g.frags = append(g.frags, a.Make(p))
 	}
-	var lintLines []string
-	for _, f := range frags {
-		lintLines = append(lintLines, f.Lint...)
+	lintLines := g.collect(func(f stack.Make) []string { return f.Lint })
+	lintSteps := stepNames("lint", lintLines, g.stepNames())
+	g.header(lintSteps, p.Exclude, diffCoverage, base)
+
+	g.rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{"$(PAWL) check"})
+	g.rule("fmt", "rewrite files with the formatters", nil, g.collect(func(f stack.Make) []string { return f.Fmt }))
+	g.rule("fmt-check", "fail when a file is not formatted", nil, g.collect(func(f stack.Make) []string { return f.FmtCheck }))
+	// one target per linter, so `make -k lint` reports every tool's findings instead of stopping at the first
+	g.rule("lint", "every linter, type checker and pattern rule on the whole tree; `make -k lint` reports every step", append([]string{"fmt-check"}, lintSteps...))
+	for i, name := range lintSteps {
+		g.rule(name, "one step of lint", nil, []string{lintLines[i]})
 	}
+	g.rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, g.collect(func(f stack.Make) []string { return f.Test }))
+	g.rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, g.collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) check --ring precommit"})
+	g.rule("coverage", "tests with coverage; changed lines must reach DIFF_COVERAGE percent", nil, g.collect(func(f stack.Make) []string { return f.Coverage }))
+	g.rule("audit", "dependency vulnerability audits", nil, g.collect(func(f stack.Make) []string { return f.Audit }))
+	g.rule("mutation", "mutation testing on the change (nightly)", nil, g.collect(func(f stack.Make) []string { return f.Mutation }))
+	g.rule("nightly", "everything, including the slow rings", []string{"check", "coverage", "audit", "mutation"}, []string{"$(PAWL) check --ring nightly", "$(PAWL) budget"})
+	return g.b.String()
+}
+
+// generator writes the Makefile text from the adapters' fragments.
+type generator struct {
+	b     strings.Builder
+	frags []stack.Make
+}
+
+// collect joins one recipe part of every fragment, in adapter order.
+func (g *generator) collect(pick func(stack.Make) []string) []string {
+	var out []string
+	for _, f := range g.frags {
+		out = append(out, pick(f)...)
+	}
+	return out
+}
+
+// stepNames joins the step names the adapters give their lint lines.
+func (g *generator) stepNames() map[string]string {
 	named := map[string]string{}
-	for _, f := range frags {
+	for _, f := range g.frags {
 		for line, name := range f.StepNames {
 			named[line] = name
 		}
 	}
-	lintSteps := stepNames("lint", lintLines, named)
-	var b strings.Builder
+	return named
+}
+
+// header writes the comment, the make settings, the phony list and the variables above the first rule.
+func (g *generator) header(lintSteps, exclude []string, diffCoverage int, base string) {
+	b := &g.b
 	b.WriteString("# Standard targets written by pawl (https://github.com/rojosinalma/pawl). Project-owned: edit freely.\n")
 	b.WriteString("# `make check` is the merge gate; `make precommit` runs from .githooks/pre-commit on staged files.\n")
 	b.WriteString(".DEFAULT_GOAL := check\n")
 	b.WriteString("SHELL := /bin/sh\n")
 	b.WriteString(".PHONY: " + strings.Join(append(append(append([]string{}, Standard...), Extra...), lintSteps...), " ") + "\n\n")
 	b.WriteString("# Paths the file-list tools skip, as an extended regular expression; keep it in step with project.exclude in pawl.toml.\n")
-	fmt.Fprintf(&b, "PAWL_EXCLUDE ?= %s\n", excludeRegex(p.Exclude))
-	fmt.Fprintf(&b, "PAWL_BASE ?= %s\n", base)
-	fmt.Fprintf(&b, "DIFF_COVERAGE ?= %d\n", diffCoverage)
-	for _, f := range frags {
-		for _, v := range f.Vars {
-			b.WriteString(v + "\n")
-		}
+	fmt.Fprintf(b, "PAWL_EXCLUDE ?= %s\n", excludeRegex(exclude))
+	fmt.Fprintf(b, "PAWL_BASE ?= %s\n", base)
+	fmt.Fprintf(b, "DIFF_COVERAGE ?= %d\n", diffCoverage)
+	for _, v := range g.collect(func(f stack.Make) []string { return f.Vars }) {
+		b.WriteString(v + "\n")
 	}
 	b.WriteString("\n")
+}
 
-	rule := func(name, comment string, deps []string, lines ...[]string) {
-		fmt.Fprintf(&b, "%s:%s  ## %s\n", name, depString(deps), comment)
-		n := 0
-		for _, group := range lines {
-			for _, l := range group {
-				b.WriteString("\t" + l + "\n")
-				n++
-			}
+// rule writes one target; a target without recipe lines runs @true so make does not report it as having nothing to do.
+func (g *generator) rule(name, comment string, deps []string, lines ...[]string) {
+	fmt.Fprintf(&g.b, "%s:%s  ## %s\n", name, depString(deps), comment)
+	n := 0
+	for _, group := range lines {
+		for _, l := range group {
+			g.b.WriteString("\t" + l + "\n")
+			n++
 		}
-		if n == 0 {
-			b.WriteString("\t@true\n")
-		}
-		b.WriteString("\n")
 	}
-	collect := func(pick func(stack.Make) []string) []string {
-		var out []string
-		for _, f := range frags {
-			out = append(out, pick(f)...)
-		}
-		return out
+	if n == 0 {
+		g.b.WriteString("\t@true\n")
 	}
-
-	rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{"$(PAWL) check"})
-	rule("fmt", "rewrite files with the formatters", nil, collect(func(f stack.Make) []string { return f.Fmt }))
-	rule("fmt-check", "fail when a file is not formatted", nil, collect(func(f stack.Make) []string { return f.FmtCheck }))
-	// one target per linter, so `make -k lint` reports every tool's findings instead of stopping at the first
-	rule("lint", "every linter, type checker and pattern rule on the whole tree; `make -k lint` reports every step", append([]string{"fmt-check"}, lintSteps...))
-	for i, name := range lintSteps {
-		rule(name, "one step of lint", nil, []string{lintLines[i]})
-	}
-	rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, collect(func(f stack.Make) []string { return f.Test }))
-	rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) check --ring precommit"})
-	rule("coverage", "tests with coverage; changed lines must reach DIFF_COVERAGE percent", nil, collect(func(f stack.Make) []string { return f.Coverage }))
-	rule("audit", "dependency vulnerability audits", nil, collect(func(f stack.Make) []string { return f.Audit }))
-	rule("mutation", "mutation testing on the change (nightly)", nil, collect(func(f stack.Make) []string { return f.Mutation }))
-	rule("nightly", "everything, including the slow rings", []string{"check", "coverage", "audit", "mutation"}, []string{"$(PAWL) check --ring nightly", "$(PAWL) budget"})
-	return b.String()
+	g.b.WriteString("\n")
 }
 
 // excludeRegex turns the manifest's exclude prefixes into the regular expression of PAWL_EXCLUDE; without excludes

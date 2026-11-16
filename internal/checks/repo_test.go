@@ -15,8 +15,6 @@ func TestHook(t *testing.T) {
 		{"missing", func(f *fixture) { f.remove(hookFile) }, "hook is missing"},
 		{"not executable", func(f *fixture) { f.writeMode(hookFile, "#!/bin/sh\nmake precommit\n", 0o644) }, "not executable"},
 		{"no make precommit", func(f *fixture) { f.writeMode(hookFile, "#!/bin/sh\nexit 0\n", 0o755) }, "does not run `make precommit`"},
-		{"hooks path unset", func(f *fixture) { f.run("git", "config", "--unset", "core.hooksPath") }, "core.hooksPath"},
-		{"hooks path elsewhere", func(f *fixture) { f.run("git", "config", "core.hooksPath", ".husky") }, "core.hooksPath"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t, true)
@@ -26,14 +24,10 @@ func TestHook(t *testing.T) {
 	}
 }
 
-func TestHookPathForms(t *testing.T) {
-	for _, value := range []string{".githooks/", "./.githooks"} {
-		f := newFixture(t, true)
-		f.run("git", "config", "core.hooksPath", value)
-		requireClean(t, f.check("check", "repo.hook"))
-	}
+// The hooks path of a clone is the machine's business (`pawl doctor`); a fresh CI checkout must pass the check.
+func TestHookIgnoresTheClonesHooksPath(t *testing.T) {
 	f := newFixture(t, true)
-	f.run("git", "config", "core.hooksPath", f.load().Root+"/.githooks")
+	f.run("git", "config", "--unset", "core.hooksPath")
 	requireClean(t, f.check("check", "repo.hook"))
 }
 

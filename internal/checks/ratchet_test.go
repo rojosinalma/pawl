@@ -17,7 +17,7 @@ func TestRatchetRegressionAgainstBase(t *testing.T) {
 	f := newFixture(t, true)
 	f.write("a.go", reasoned("a"))
 	rep := f.check("check")
-	got := requireFinding(t, rep, "escape.suppressions", report.Error, "rose from 0 to 1 against the base commit; new: a.go:4 nolint")
+	got := requireFinding(t, rep, "escape.suppressions", report.Error, "rose from 0 to 1 against the base commit; new: a.go nolint")
 	if n := len(find(rep, "escape.suppressions", "rose from")); n != 1 {
 		t.Errorf("the regression is reported %d times, want once:\n%s", n, dump(rep))
 	}
@@ -105,7 +105,7 @@ func TestDuplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cur.Offenders["escape.duplication"]; len(got) != 1 || got[0] != "a.go:1-20 ~ b.go:5-24" {
+	if got := cur.Offenders["escape.duplication"]; len(got) != 1 || got[0] != "a.go ~ b.go" {
 		t.Fatalf("offenders = %v", got)
 	}
 	requireFinding(t, f.check("check"), "escape.duplication", report.Error, "the baseline does not record it")
@@ -114,7 +114,7 @@ func TestDuplication(t *testing.T) {
 
 	abs := f.load().Root + "/c.go"
 	f.write(jscpdReport, jscpdJSON([2]string{"./a.go", "b.go"}, [2]string{abs, "d.go"}))
-	requireFinding(t, f.check("check"), "escape.duplication", report.Error, "rose from 1 to 2 against the baseline; new: c.go:1-20 ~ d.go:5-24")
+	requireFinding(t, f.check("check"), "escape.duplication", report.Error, "rose from 1 to 2 against the baseline; new: c.go ~ d.go")
 
 	f.write(jscpdReport, "not json")
 	if _, err := Run(f.load(), Options{}); err == nil {

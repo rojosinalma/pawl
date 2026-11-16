@@ -25,13 +25,18 @@ const (
 	CargoLlvmCovVersion = "0.9.1"
 )
 
+// Adapter is the stack.Adapter of this stack.
 type Adapter struct{}
 
 func init() { stack.Register(Adapter{}) }
 
-func (Adapter) Name() string  { return "rust" }
+// Name implements stack.Adapter.
+func (Adapter) Name() string { return "rust" }
+
+// Title implements stack.Adapter.
 func (Adapter) Title() string { return "Rust" }
 
+// Detect implements stack.Adapter.
 func (Adapter) Detect(files []string) bool {
 	for _, f := range files {
 		if f == "Cargo.toml" || strings.HasSuffix(f, ".rs") {
@@ -41,6 +46,7 @@ func (Adapter) Detect(files []string) bool {
 	return false
 }
 
+// Facts implements stack.Adapter.
 func (Adapter) Facts(root string) map[string]string {
 	facts := map[string]string{}
 	if raw, err := os.ReadFile(filepath.Join(root, "Cargo.toml")); err == nil {
@@ -53,6 +59,7 @@ func (Adapter) Facts(root string) map[string]string {
 	return facts
 }
 
+// Tools implements stack.Adapter.
 func (Adapter) Tools() []stack.Tool {
 	return []stack.Tool{
 		{Name: "cargo", Check: []string{"cargo", "--version"}, Install: "the toolchain in rust-toolchain.toml; rustup", Rings: []string{"precommit", "check"}},
@@ -66,13 +73,18 @@ func (Adapter) Tools() []stack.Tool {
 	}
 }
 
+// SourceGlobs implements stack.Adapter.
 func (Adapter) SourceGlobs() []string { return []string{"**/*.rs"} }
-func (Adapter) TestGlobs() []string   { return []string{"tests/**", "**/tests/**", "benches/**"} }
 
+// TestGlobs implements stack.Adapter.
+func (Adapter) TestGlobs() []string { return []string{"tests/**", "**/tests/**", "benches/**"} }
+
+// Pins implements stack.Adapter.
 func (Adapter) Pins() []stack.Pin {
 	return []stack.Pin{{What: "Rust toolchain (rust-toolchain.toml)", Files: []string{"rust-toolchain.toml", "rust-toolchain"}, Locks: []string{"Cargo.lock"}}}
 }
 
+// Suppressions implements stack.Adapter.
 func (Adapter) Suppressions() []stack.Suppression {
 	globs := []string{"**/*.rs"}
 	return []stack.Suppression{
@@ -82,6 +94,7 @@ func (Adapter) Suppressions() []stack.Suppression {
 	}
 }
 
+// Configs implements stack.Adapter.
 func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	return []stack.ConfigFile{
 		{Path: "rustfmt.toml", Content: rustfmtConfig},
@@ -90,6 +103,7 @@ func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	}
 }
 
+// Rules implements stack.Adapter.
 func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	lint := func(via ...string) stack.Enforcement { return stack.Enforcement{Step: "lint", Via: via} }
 	sg := common.RuleIDs("rust")
@@ -121,6 +135,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	}
 }
 
+// Verifiers implements stack.Adapter.
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 	denied := func(rule, lint string) stack.Verifier {
 		return stack.V(rule, "clippy/"+lint, stack.Matches("Makefile", regexp.MustCompile(`(?m)^CLIPPY_LINTS\b.*-D\s*clippy::`+lint+`\b`), "clippy::"+lint+" denied in CLIPPY_LINTS"))
@@ -170,6 +185,7 @@ var clippyLints = []string{
 	"-D clippy::expect_used",
 }
 
+// Make implements stack.Adapter.
 func (Adapter) Make(stack.Params) stack.Make {
 	return stack.Make{
 		Vars: []string{

@@ -47,25 +47,9 @@ func (r *run) checkHook() error {
 				WithFix("add the line `make precommit` to " + hookFile))
 		}
 	}
-	if r.p.Repo == nil {
-		return nil
-	}
-	if got := r.p.Repo.HooksPath(); !r.isHookDir(got) {
-		r.add(report.Errorf(rule, "", 0, "core.hooksPath is %q; git does not run %s", got, hookFile).
-			WithFix("git config core.hooksPath " + hookDir))
-	}
+	// Whether this clone points core.hooksPath at the hook is a property of the machine, not of the repository:
+	// `pawl doctor` checks it. A fresh CI checkout never has it set.
 	return nil
-}
-
-// isHookDir reports whether a core.hooksPath value names the project's hook directory, relative or absolute.
-func (r *run) isHookDir(got string) bool {
-	if got == "" {
-		return false
-	}
-	if filepath.IsAbs(got) {
-		return filepath.Clean(got) == filepath.Join(r.p.Root, hookDir)
-	}
-	return path.Clean(filepath.ToSlash(got)) == hookDir
 }
 
 // checkPins verifies repo.pinned: every active stack with files in the tree records its toolchain version and
@@ -172,7 +156,9 @@ func workflowFindings(file string, doc *yaml.Node) []report.Finding {
 			out = append(out, usesFinding(file, field(step, "uses"))...)
 			if run := field(step, "run"); run != nil && ring {
 				runsMake = runsMake || makeRe.MatchString(run.Value)
-				out = append(out, runFinding(file, run)...)
+				if !reportsFailure(step) {
+					out = append(out, runFinding(file, run)...)
+				}
 			}
 		}
 	}
@@ -181,6 +167,12 @@ func workflowFindings(file string, doc *yaml.Node) []report.Finding {
 			WithFix("add a step `run: make check` (or `make nightly`)"))
 	}
 	return out
+}
+
+// reportsFailure reports whether the step only runs after a failure (annotations, an issue for a red nightly): it
+// reports on the checks, it is not one of them.
+func reportsFailure(step *yaml.Node) bool {
+	return strings.Contains(scalar(field(step, "if")), "failure()")
 }
 
 // runFinding warns about a run step of a ring workflow that bypasses make and pawl: CI then runs something no

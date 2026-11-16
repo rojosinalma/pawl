@@ -171,7 +171,8 @@ type hit struct {
 	Reason string
 }
 
-func (h hit) offender() string { return fmt.Sprintf("%s:%d %s", h.File, h.Line, h.Kind) }
+// offender names the file and the kind, not the line: the baseline must not change when code above a directive moves.
+func (h hit) offender() string { return h.File + " " + h.Kind }
 
 // scannable reports whether the suppression scan reads the file at all.
 func scannable(f string) bool {
@@ -222,19 +223,59 @@ func scanFile(root, f string, sups []stack.Suppression) ([]hit, error) {
 	var out []hit
 	for n, line := range lines {
 		for _, s := range mine {
-			for _, m := range s.Pattern.FindAllStringSubmatch(line, -1) {
-				out = append(out, hit{File: f, Line: n + 1, Kind: s.Kind, Reason: group(s.Pattern, m, "reason")})
-			}
+			out = append(out, lineHits(f, n+1, line, s)...)
 		}
 	}
 	return out, nil
 }
 
-func group(re *regexp.Regexp, m []string, name string) string {
-	if i := re.SubexpIndex(name); i >= 0 && i < len(m) {
-		return strings.TrimSpace(m[i])
+// lineHits returns the directives of one kind on one line, leaving out those inside a string literal.
+func lineHits(f string, number int, line string, s stack.Suppression) []hit {
+	var out []hit
+	for _, idx := range s.Pattern.FindAllStringSubmatchIndex(line, -1) {
+		if !quoted(line, idx[0]) {
+			out = append(out, hit{File: f, Line: number, Kind: s.Kind, Reason: groupAt(s.Pattern, line, idx, "reason")})
+		}
 	}
-	return ""
+	return out
+}
+
+// quoted reports whether the directive that starts at line[start] sits inside a string literal on that line: an odd
+// number of the same quote before it and at least one from there on (the directive's own text may run to the end of
+// the line, so the closing quote is looked for from its start). A directive in a string (a test table, a help text,
+// a regular expression) is text about a suppression, not a suppression. The check is per line and per quote
+// character; an apostrophe in a comment before a real directive does not hide it, because no quote follows.
+func quoted(line string, start int) bool {
+	for _, q := range []byte{'"', '`', '\''} {
+		if unescaped(line[:start], q)%2 == 1 && unescaped(line[start:], q) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// unescaped counts the occurrences of q in s that no backslash precedes.
+func unescaped(s string, q byte) int {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' {
+			i++
+			continue
+		}
+		if s[i] == q {
+			n++
+		}
+	}
+	return n
+}
+
+// groupAt returns the named group of one match given by its index pairs, or "".
+func groupAt(re *regexp.Regexp, line string, idx []int, name string) string {
+	i := re.SubexpIndex(name)
+	if i < 0 || 2*i+1 >= len(idx) || idx[2*i] < 0 {
+		return ""
+	}
+	return line[idx[2*i]:idx[2*i+1]]
 }
 
 // checkSuppressionReasons verifies the reason half of escape.suppressions: every directive explains itself.
@@ -268,8 +309,8 @@ func reasonSyntax(kind string) string {
 		"ast-grep-ignore":    "ast-grep" + "-ignore: rule-id -- <reason>",
 		"typos-ignore":       "typos" + ": ignore -- <reason>",
 		"gitleaks-allow":     "gitleaks" + ":allow -- <reason>",
-		"shellcheck-disable": "# shellcheck " + "disable=SC2086 -- <reason>",
-		"hadolint-ignore":    "# hadolint " + "ignore=DL3008 -- <reason>",
+		"shellcheck-disable": "# shellcheck " + "disable=SC2086 # <reason>",
+		"hadolint-ignore":    "# hadolint " + "ignore=DL3008 # <reason>",
 		"zizmor-ignore":      "# zizmor" + ": ignore[rule] -- <reason>",
 		"biome-ignore":       "// biome" + "-ignore lint/group/rule: <reason>",
 		"ts-ignore":          "// @ts" + "-ignore -- <reason>",
@@ -312,7 +353,7 @@ func (r *run) oversized() ([]string, error) {
 }
 
 var (
-	// todoRe finds a TODO-style marker after a comment opener. The words are joined at run time so this file
+	// todoRe finds a to-do marker after a comment opener. The words are joined at run time so this file
 	// carries no marker itself.
 	todoRe = regexp.MustCompile(`(//|#|/\*|^\s*\*|--|;)[^\n]*\b(` + strings.Join([]string{"TO" + "DO", "FIX" + "ME", "X" + "XX", "HA" + "CK"}, "|") + `)\b`)
 	// linkRe is what makes a marker tracked: a URL or an issue number.
@@ -333,9 +374,9 @@ func (r *run) unlinkedTodos() ([]string, error) {
 		if !ok {
 			continue
 		}
-		for n, line := range lines {
+		for _, line := range lines {
 			if todoRe.MatchString(line) && !linkRe.MatchString(line) {
-				out = append(out, fmt.Sprintf("%s:%d", f, n+1))
+				out = append(out, f)
 			}
 		}
 	}

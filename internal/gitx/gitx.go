@@ -3,14 +3,20 @@ package gitx
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
+
+// gitTimeout bounds one git call, so a hung git (a lock, a credential prompt) cannot stall a run forever.
+const gitTimeout = 60 * time.Second
 
 // Repo is a checkout.
 type Repo struct {
@@ -33,7 +39,9 @@ func IsRepo(dir string) bool {
 }
 
 func run(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -104,12 +112,15 @@ func (r *Repo) ChangedLines(base string) (added, deleted int, err error) {
 	}
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 3 || fields[0] == "-" {
+		if len(fields) < 3 {
 			continue
 		}
-		var a, d int
-		fmt.Sscanf(fields[0], "%d", &a)
-		fmt.Sscanf(fields[1], "%d", &d)
+		// binary files show "-" for both counts and do not parse; they have no lines to count
+		a, errA := strconv.Atoi(fields[0])
+		d, errD := strconv.Atoi(fields[1])
+		if errA != nil || errD != nil {
+			continue
+		}
 		added += a
 		deleted += d
 	}

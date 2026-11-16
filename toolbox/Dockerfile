@@ -37,7 +37,7 @@ LABEL org.opencontainers.image.title="pawl toolbox" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${PAWL_VERSION}"
 # A compiler and linker for native gems, Go's race detector and Rust; make and git for the rings.
-# hadolint ignore=DL3008
+# hadolint ignore=DL3008 # apt versions follow the digest-pinned base image; pinning each package breaks at every Debian point release
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential ca-certificates curl git libssl-dev libyaml-dev make pkg-config xz-utils zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*

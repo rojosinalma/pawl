@@ -32,13 +32,28 @@ type Adapter struct{}
 
 func init() { stack.Register(Adapter{}) }
 
-func (Adapter) Name() string                      { return "common" }
-func (Adapter) Title() string                     { return "every stack" }
-func (Adapter) Detect([]string) bool              { return true }
-func (Adapter) Facts(string) map[string]string    { return nil }
-func (Adapter) SourceGlobs() []string             { return nil }
-func (Adapter) TestGlobs() []string               { return nil }
-func (Adapter) Pins() []stack.Pin                 { return nil }
+// Name implements stack.Adapter.
+func (Adapter) Name() string { return "common" }
+
+// Title implements stack.Adapter.
+func (Adapter) Title() string { return "every stack" }
+
+// Detect implements stack.Adapter.
+func (Adapter) Detect([]string) bool { return true }
+
+// Facts implements stack.Adapter.
+func (Adapter) Facts(string) map[string]string { return nil }
+
+// SourceGlobs implements stack.Adapter.
+func (Adapter) SourceGlobs() []string { return nil }
+
+// TestGlobs implements stack.Adapter.
+func (Adapter) TestGlobs() []string { return nil }
+
+// Pins implements stack.Adapter.
+func (Adapter) Pins() []stack.Pin { return nil }
+
+// Suppressions implements stack.Adapter.
 func (Adapter) Suppressions() []stack.Suppression { return suppressions }
 
 var suppressions = []stack.Suppression{
@@ -47,6 +62,7 @@ var suppressions = []stack.Suppression{
 	{Kind: "gitleaks-allow", Pattern: regexp.MustCompile(`gitleaks:allow(?:\s*(?:--|#|//)\s*(?P<reason>.+))?`), Globs: []string{"**/*"}},
 }
 
+// Tools implements stack.Adapter.
 func (Adapter) Tools() []stack.Tool {
 	return []stack.Tool{
 		{Name: "ast-grep", Version: AstGrepVersion, Check: []string{"ast-grep", "--version"}, Mise: "ast-grep", Install: "mise use ast-grep@" + AstGrepVersion + " (or cargo install ast-grep)", Rings: []string{"check"}},
@@ -64,6 +80,7 @@ type ruleParams struct {
 	TestDirs           []string
 }
 
+// Configs implements stack.Adapter.
 func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	rp := ruleParams{ConfigModule: strings.TrimSuffix(p.ConfigModule, "/"), OwnModule: regexp.QuoteMeta(p.OwnModule), TestDirs: p.TestDirs}
 	rp.ConfigModuleOrHint = rp.ConfigModule
@@ -76,10 +93,7 @@ func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 		{Path: ".typos.toml", Content: typosConfig},
 		{Path: ".gitleaks.toml", Content: gitleaksConfig},
 	}
-	for _, f := range RulePack(rp) {
-		out = append(out, f)
-	}
-	return out
+	return append(out, RulePack(rp)...)
 }
 
 // RulePack renders the embedded ast-grep rules for the project.
@@ -142,6 +156,7 @@ func RuleIDs(stackName string) map[string][]string {
 	return out
 }
 
+// Rules implements stack.Adapter.
 func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	pawl := stack.Enforcement{Step: "check", Via: []string{"pawl"}}
 	return map[string]stack.Enforcement{
@@ -163,6 +178,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	}
 }
 
+// Verifiers implements stack.Adapter.
 func (Adapter) Verifiers(stack.Params) []stack.Verifier {
 	return []stack.Verifier{
 		stack.V("escape.duplication", "jscpd", stack.Exists(".jscpd.json")),
@@ -175,6 +191,7 @@ func (Adapter) Verifiers(stack.Params) []stack.Verifier {
 	}
 }
 
+// Make implements stack.Adapter.
 func (Adapter) Make(stack.Params) stack.Make {
 	return stack.Make{
 		Vars: []string{
@@ -206,6 +223,7 @@ const jscpdConfig = `{
     "**/vendor/**",
     "**/dist/**",
     "**/.pawl/**",
+    "**/.mise/**",
     "**/*.lock",
     "**/*.min.*",
     "**/testdata/**",

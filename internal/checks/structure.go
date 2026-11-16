@@ -89,10 +89,8 @@ func recipeMatches(mk *makefile.Makefile, target string, re *regexp.Regexp, vars
 		if !ok {
 			return false
 		}
-		for _, line := range t.Recipe {
-			if re.MatchString(line) || (vars && varsMatch(mk, line, re, 0)) {
-				return true
-			}
+		if recipeLinesMatch(mk, t.Recipe, re, vars) {
+			return true
 		}
 		for _, d := range t.Deps {
 			if walk(d) {
@@ -102,6 +100,16 @@ func recipeMatches(mk *makefile.Makefile, target string, re *regexp.Regexp, vars
 		return false
 	}
 	return walk(target)
+}
+
+// recipeLinesMatch reports whether one recipe line, or (with vars) a variable it references, matches the expression.
+func recipeLinesMatch(mk *makefile.Makefile, recipe []string, re *regexp.Regexp, vars bool) bool {
+	for _, line := range recipe {
+		if re.MatchString(line) || (vars && varsMatch(mk, line, re, 0)) {
+			return true
+		}
+	}
+	return false
 }
 
 // varsMatch expands the variables a line references, recursively up to maxVarDepth, and matches their values.
@@ -171,13 +179,4 @@ func (r *run) checkSpeed() error {
 			WithFix("scope the test command with a variable such as `TEST_SCOPE ?= $(shell $(PAWL) affected <stack>)`"))
 	}
 	return nil
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }

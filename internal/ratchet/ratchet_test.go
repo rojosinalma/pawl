@@ -17,14 +17,11 @@ func TestRegressionsAndStale(t *testing.T) {
 	cur.Count("code.todo-links", 4)
 
 	reg := Regressions(base, cur)
-	if len(reg) != 2 {
+	if len(reg) != 1 {
 		t.Fatalf("Regressions = %+v", reg)
 	}
-	if reg[0].Metric != "code.file-size" || !reflect.DeepEqual(reg[0].NewOffenders, []string{"b.go"}) {
-		t.Errorf("moved offender not reported: %+v", reg[0])
-	}
-	if reg[1].Metric != "escape.suppressions" || reg[1].Baseline != 2 || reg[1].Current != 3 {
-		t.Errorf("rise not reported: %+v", reg[1])
+	if reg[0].Metric != "escape.suppressions" || reg[0].Baseline != 2 || reg[0].Current != 3 || len(reg[0].NewOffenders) != 3 {
+		t.Errorf("rise not reported: %+v", reg[0])
 	}
 
 	stale := Stale(base, cur)

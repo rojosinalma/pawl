@@ -1,0 +1,4 @@
+# actionlint configuration written by pawl. Add self-hosted runner labels under self-hosted-runner.labels.
+self-hosted-runner:
+  labels: []
+config-variables: null

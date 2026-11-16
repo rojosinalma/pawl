@@ -1,0 +1,12 @@
+# gitleaks: secret detection. Extends the built-in rules; add project allowlists below.
+title = "project gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "lockfiles and vendored dependencies carry hashes, not secrets"
+paths = [
+  '''(^|/)(package-lock\.json|bun\.lock|bun\.lockb|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|uv\.lock|poetry\.lock|go\.sum|Cargo\.lock|mise\.lock)$''',
+  '''(^|/)(vendor|node_modules)/''',
+]

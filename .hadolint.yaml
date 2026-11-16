@@ -1,0 +1,8 @@
+# hadolint configuration written by pawl. Severity per rule: override.error / warning / info / style.
+failure-threshold: warning
+ignored: []
+override:
+  error: []
+  warning: []
+  info: []
+  style: []

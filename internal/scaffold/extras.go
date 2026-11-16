@@ -138,7 +138,7 @@ func SyncRules(p *project.Project) ([]string, error) {
 		if have, err := os.ReadFile(path); err == nil && bytes.Equal(have, []byte(c.Content)) {
 			continue
 		}
-		if err := writeFile(path, c.Content, 0o644); err != nil {
+		if err := writeFile(p.Root, c.Path, c.Content, 0o644); err != nil {
 			return nil, fmt.Errorf("sync rules: %w", err)
 		}
 		written = append(written, c.Path)
@@ -161,7 +161,7 @@ func SyncAgents(p *project.Project) (bool, error) {
 	if content == string(raw) {
 		return false, nil
 	}
-	if err := writeFile(path, content, 0o644); err != nil {
+	if err := writeFile(p.Root, agentsFile, content, 0o644); err != nil {
 		return false, fmt.Errorf("sync agents: %w", err)
 	}
 	return true, nil
@@ -197,11 +197,18 @@ func (w *writer) appendTo(rel, header, text string) error {
 	return w.overwrite(rel, withNewline(existing)+text, 0o644, true)
 }
 
-func writeFile(path, content string, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+// writeFile writes rel under root through os.Root, so a name that would escape the project fails instead of
+// writing outside it.
+func writeFile(root, rel, content string, mode os.FileMode) error {
+	r, err := os.OpenRoot(root)
+	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), mode)
+	defer r.Close()
+	if err := r.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
+		return err
+	}
+	return r.WriteFile(rel, []byte(content), mode)
 }
 
 // withNewline returns s ending with a newline (an empty s stays empty).

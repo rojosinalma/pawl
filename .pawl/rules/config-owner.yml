@@ -1,0 +1,66 @@
+# pawl rule pack: resilience.config-owner. The environment is read only in the configuration module
+# (internal/config).
+id: config-owner-go
+language: Go
+severity: error
+message: Read the environment only in the configuration module (internal/config); pass the value in.
+# tree-sitter-go reads a bare `os.Getenv($KEY)` pattern as a type conversion, so the rule matches the call node
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: ^os\.(Getenv|LookupEnv|Environ)$
+files: ["**/*.go"]
+ignores: ["**/*_test.go", "internal/config/**"]
+---
+id: config-owner-ts
+language: TypeScript
+severity: error
+message: Read the environment only in the configuration module (internal/config); pass the value in.
+rule:
+  any:
+    - pattern: process.env.$KEY
+    - pattern: process.env[$KEY]
+    - pattern: Bun.env.$KEY
+    - pattern: Bun.env[$KEY]
+    - pattern: import.meta.env.$KEY
+files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.js", "**/*.mjs"]
+ignores: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/*.config.*", "internal/config/**"]
+---
+id: config-owner-py
+language: Python
+severity: error
+message: Read the environment only in the configuration module (internal/config); pass the value in.
+rule:
+  any:
+    - pattern: os.environ[$KEY]
+    - pattern: os.environ.get($$$)
+    - pattern: os.getenv($$$)
+files: ["**/*.py"]
+ignores: ["**/test_*.py", "**/*_test.py", "**/tests/**", "**/conftest.py", "internal/config/**"]
+---
+id: config-owner-rb
+language: Ruby
+severity: error
+message: Read the environment only in the configuration module (internal/config); pass the value in.
+rule:
+  any:
+    - pattern: ENV[$KEY]
+    - pattern: ENV.fetch($$$)
+files: ["**/*.rb"]
+ignores: ["**/*_test.rb", "**/*_spec.rb", "**/test/**", "**/spec/**", "config.ru", "Rakefile", "**/Gemfile", "internal/config/**", "internal/config.rb"]
+---
+id: config-owner-rs
+language: Rust
+severity: error
+message: Read the environment only in the configuration module (internal/config); pass the value in.
+rule:
+  any:
+    - pattern: std::env::var($KEY)
+    - pattern: env::var($KEY)
+    - pattern: std::env::var_os($KEY)
+    - pattern: env::var_os($KEY)
+    - pattern: std::env::vars()
+    - pattern: env::vars()
+files: ["**/*.rs"]
+ignores: ["**/tests/**", "build.rs", "internal/config/**", "internal/config.rs"]

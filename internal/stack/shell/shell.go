@@ -18,23 +18,30 @@ const (
 	BatsVersion       = "1.14.0"
 )
 
+// Adapter is the stack.Adapter of this stack.
 type Adapter struct{}
 
 func init() { stack.Register(Adapter{}) }
 
-func (Adapter) Name() string  { return "shell" }
+// Name implements stack.Adapter.
+func (Adapter) Name() string { return "shell" }
+
+// Title implements stack.Adapter.
 func (Adapter) Title() string { return "Shell, Docker and GitHub Actions" }
 
 var scriptGlobs = []string{"**/*.sh", "**/*.bash", "bin/*", "scripts/*", ".githooks/*"}
 var dockerGlobs = []string{"**/Dockerfile", "**/Dockerfile.*", "**/*.dockerfile", "**/Containerfile"}
 var workflowGlobs = []string{".github/workflows/*.yml", ".github/workflows/*.yaml"}
 
+// Detect implements stack.Adapter.
 func (Adapter) Detect(files []string) bool {
 	return stack.HasAny(files, []string{"**/*.sh", "**/*.bash"}) || stack.HasAny(files, dockerGlobs) || stack.HasAny(files, workflowGlobs)
 }
 
+// Facts implements stack.Adapter.
 func (Adapter) Facts(string) map[string]string { return nil }
 
+// Tools implements stack.Adapter.
 func (Adapter) Tools() []stack.Tool {
 	return []stack.Tool{
 		{Name: "shellcheck", Version: ShellcheckVersion, Check: []string{"shellcheck", "--version"}, Mise: "shellcheck", Install: "mise use shellcheck@" + ShellcheckVersion, Rings: []string{"precommit", "check"}},
@@ -46,15 +53,20 @@ func (Adapter) Tools() []stack.Tool {
 	}
 }
 
+// SourceGlobs implements stack.Adapter.
 func (Adapter) SourceGlobs() []string {
 	return append(append([]string{}, scriptGlobs...), dockerGlobs...)
 }
+
+// TestGlobs implements stack.Adapter.
 func (Adapter) TestGlobs() []string { return []string{"**/*.bats", "test/**", "tests/**"} }
 
+// Pins implements stack.Adapter.
 func (Adapter) Pins() []stack.Pin {
 	return []stack.Pin{{What: "tool versions for shell, Docker and Actions linters (mise.toml)", Files: []string{"mise.toml", ".tool-versions"}}}
 }
 
+// Suppressions implements stack.Adapter.
 func (Adapter) Suppressions() []stack.Suppression {
 	return []stack.Suppression{
 		{Kind: "shellcheck-disable", Pattern: regexp.MustCompile(`shellcheck\s+disable=[\w,]+(?:\s*(?:--|#)\s*(?P<reason>.+))?`), Globs: scriptGlobs},
@@ -63,6 +75,7 @@ func (Adapter) Suppressions() []stack.Suppression {
 	}
 }
 
+// Configs implements stack.Adapter.
 func (Adapter) Configs(stack.Params) []stack.ConfigFile {
 	return []stack.ConfigFile{
 		{Path: ".shellcheckrc", Content: shellcheckrc},
@@ -73,6 +86,7 @@ func (Adapter) Configs(stack.Params) []stack.ConfigFile {
 	}
 }
 
+// Rules implements stack.Adapter.
 func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	lint := func(via ...string) stack.Enforcement { return stack.Enforcement{Step: "lint", Via: via} }
 	waive := func(what string) stack.Enforcement { return stack.Enforcement{Waived: stack.Reason("shell", what)} }
@@ -104,6 +118,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	}
 }
 
+// Verifiers implements stack.Adapter.
 func (Adapter) Verifiers(stack.Params) []stack.Verifier {
 	return []stack.Verifier{
 		stack.V("code.lint", "shellcheck", stack.Exists(".shellcheckrc")),
@@ -116,6 +131,7 @@ func (Adapter) Verifiers(stack.Params) []stack.Verifier {
 	}
 }
 
+// Make implements stack.Adapter.
 func (Adapter) Make(stack.Params) stack.Make {
 	find := `$(shell git ls-files -co --exclude-standard | grep -vE '$(PAWL_EXCLUDE)' | xargs -r shfmt -f 2>/dev/null)`
 	return stack.Make{

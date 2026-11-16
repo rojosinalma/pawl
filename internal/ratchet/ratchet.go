@@ -127,24 +127,16 @@ type Delta struct {
 	NewOffenders []string
 }
 
-// Regressions returns the metrics that rose, with the offenders that were not in the baseline.
+// Regressions returns the metrics whose count rose, with the offenders the baseline did not list. A count that
+// stays the same is never a regression, whatever moved: renaming a file must not need a recorded reason.
 func Regressions(base *Baseline, cur *Current) []Delta {
 	var out []Delta
-	keys := sortedKeys(cur.Metrics)
-	for _, k := range keys {
+	for _, k := range sortedKeys(cur.Metrics) {
 		was, known := base.Metrics[k]
 		now := cur.Metrics[k]
-		if !known {
-			// a metric the baseline never recorded is new: it starts at its current value without a regression
-			continue
-		}
-		if now > was {
+		// a metric the baseline never recorded is new: Stale reports it, it is not a regression
+		if known && now > was {
 			out = append(out, Delta{Metric: k, Baseline: was, Current: now, NewOffenders: diff(cur.Offenders[k], base.Offenders[k])})
-			continue
-		}
-		if newOnes := diff(cur.Offenders[k], base.Offenders[k]); len(newOnes) > 0 && len(base.Offenders[k]) > 0 {
-			// same count, different files: an offender moved, which is a regression too
-			out = append(out, Delta{Metric: k, Baseline: was, Current: now, NewOffenders: newOnes})
 		}
 	}
 	return out

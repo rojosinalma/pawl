@@ -24,13 +24,18 @@ const (
 	StrykerVersion = "10.1.1"
 )
 
+// Adapter is the stack.Adapter of this stack.
 type Adapter struct{}
 
 func init() { stack.Register(Adapter{}) }
 
-func (Adapter) Name() string  { return "typescript" }
+// Name implements stack.Adapter.
+func (Adapter) Name() string { return "typescript" }
+
+// Title implements stack.Adapter.
 func (Adapter) Title() string { return "TypeScript / JavaScript" }
 
+// Detect implements stack.Adapter.
 func (Adapter) Detect(files []string) bool {
 	for _, f := range files {
 		if f == "package.json" || f == "tsconfig.json" {
@@ -40,6 +45,7 @@ func (Adapter) Detect(files []string) bool {
 	return false
 }
 
+// Facts implements stack.Adapter.
 func (Adapter) Facts(root string) map[string]string {
 	facts := map[string]string{"runtime": "node"}
 	if _, err := os.Stat(filepath.Join(root, "bun.lock")); err == nil {
@@ -62,6 +68,7 @@ func (Adapter) Facts(root string) map[string]string {
 	return facts
 }
 
+// Tools implements stack.Adapter.
 func (Adapter) Tools() []stack.Tool {
 	return []stack.Tool{
 		{Name: "bun", Check: []string{"bun", "--version"}, Install: "the version in .bun-version or package.json engines; https://bun.sh", Rings: []string{"precommit", "check"}},
@@ -71,14 +78,17 @@ func (Adapter) Tools() []stack.Tool {
 	}
 }
 
+// SourceGlobs implements stack.Adapter.
 func (Adapter) SourceGlobs() []string {
 	return []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"}
 }
 
+// TestGlobs implements stack.Adapter.
 func (Adapter) TestGlobs() []string {
 	return []string{"**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/test/**", "**/tests/**"}
 }
 
+// Pins implements stack.Adapter.
 func (Adapter) Pins() []stack.Pin {
 	return []stack.Pin{{
 		What:  "JavaScript runtime version (.bun-version, .node-version, .nvmrc or package.json engines)",
@@ -87,6 +97,7 @@ func (Adapter) Pins() []stack.Pin {
 	}}
 }
 
+// Suppressions implements stack.Adapter.
 func (Adapter) Suppressions() []stack.Suppression {
 	globs := []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"}
 	return []stack.Suppression{
@@ -99,6 +110,7 @@ func (Adapter) Suppressions() []stack.Suppression {
 	}
 }
 
+// Configs implements stack.Adapter.
 func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	biome := strings.ReplaceAll(biomeConfig, "{{complexity}}", strconv.Itoa(p.Complexity))
 	return []stack.ConfigFile{
@@ -108,6 +120,7 @@ func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	}
 }
 
+// Rules implements stack.Adapter.
 func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	lint := func(via ...string) stack.Enforcement { return stack.Enforcement{Step: "lint", Via: via} }
 	sg := common.RuleIDs("typescript")
@@ -139,6 +152,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	}
 }
 
+// Verifiers implements stack.Adapter.
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 	f, j := biomeFile, stack.JSONC
 	rule := func(id, group, name string) stack.Verifier {
@@ -215,6 +229,7 @@ func oxlintRule(name string) func(stack.Verify) []report.Finding {
 	}
 }
 
+// Make implements stack.Adapter.
 func (Adapter) Make(p stack.Params) stack.Make {
 	runtime := p.Facts["runtime"]
 	test := "bun test"

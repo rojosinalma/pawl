@@ -1,0 +1,71 @@
+# golangci-lint v2 configuration written by pawl. Project-owned: change thresholds and rules here; pawl check
+# verifies that the rules the catalog needs stay on (or are waived in pawl.toml with a reason).
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose      # resilience.timeouts: response bodies are closed
+    - errorlint      # errors are wrapped and compared with errors.Is/As
+    - exhaustive     # resilience.exhaustive
+    - forbidigo      # code.debug-leftovers: no fmt.Print* outside main packages
+    - gocognit       # code.complexity
+    - gosec          # drift.security
+    - misspell
+    - nilerr         # code.swallowed-errors: a nil error is not returned when err != nil
+    - noctx          # resilience.timeouts: requests carry a context
+    - revive         # code.naming
+    - testifylint    # tests.smells
+  settings:
+    gocognit:
+      min-complexity: 15
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: use the logger or return the value; printing belongs to the entry point
+      exclude-godoc-examples: true
+    revive:
+      rules:
+        - name: var-naming
+        - name: exported
+          arguments: ["checkPrivateReceivers"]
+        - name: receiver-naming
+        - name: error-naming
+        - name: error-strings
+        - name: increment-decrement
+        - name: indent-error-flow
+    exhaustive:
+      default-signifies-exhaustive: true
+    gosec:
+      excludes:
+        - G204 # pawl runs git, gh and the stack tools with arguments built from the project: that is its job
+        - G304 # pawl reads the files of the project it is pointed at
+        - G301 # directories it creates in a project are ordinary source directories (0755)
+        - G306 # files it writes into a project are ordinary source files (0644)
+  exclusions:
+    generated: lax
+    presets:
+      - std-error-handling
+    paths:
+      - test/fixtures
+    rules:
+      - path: _test\.go
+        linters: [gosec, forbidigo]
+      - path: (^cmd/|(^|/)main\.go$)
+        linters: [forbidigo]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    paths:
+      - test/fixtures # the fail fixtures are badly formatted on purpose
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
+
+run:
+  timeout: 5m

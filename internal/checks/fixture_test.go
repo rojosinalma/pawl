@@ -138,7 +138,7 @@ func (f *fixture) remove(rel string) {
 
 func (f *fixture) run(name string, args ...string) string {
 	f.t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(f.t.Context(), name, args...)
 	cmd.Dir = f.dir
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
 		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")

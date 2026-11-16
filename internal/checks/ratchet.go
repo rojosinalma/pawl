@@ -136,12 +136,12 @@ func measureDuplication(r *run) ([]string, bool, error) {
 	}
 	offenders := make([]string, 0, len(out.Duplicates))
 	for _, d := range out.Duplicates {
-		offenders = append(offenders, fmt.Sprintf("%s ~ %s", r.span(d.FirstFile), r.span(d.SecondFile)))
+		offenders = append(offenders, r.span(d.FirstFile)+" ~ "+r.span(d.SecondFile))
 	}
 	return offenders, true, nil
 }
 
-// span renders a jscpd location relative to the root, so offenders compare across checkouts.
+// span renders the file of a jscpd location relative to the root, so offenders compare across checkouts.
 func (r *run) span(f jscpdFile) string {
 	name := filepath.ToSlash(f.Name)
 	if filepath.IsAbs(f.Name) {
@@ -149,7 +149,7 @@ func (r *run) span(f jscpdFile) string {
 			name = filepath.ToSlash(rel)
 		}
 	}
-	return fmt.Sprintf("%s:%d-%d", strings.TrimPrefix(name, "./"), f.Start, f.End)
+	return strings.TrimPrefix(name, "./") // the file, not the lines: the baseline must survive edits above the block
 }
 
 // ratchetRule is the rule a missing baseline is reported under: escape.suppressions, or the first ratchet rule the

@@ -60,13 +60,23 @@ func TestRulePackRendersValidYAML(t *testing.T) {
 		got := ids(t, rp)
 		for _, s := range []string{"typescript", "python", "ruby"} {
 			for rule, list := range RuleIDs(s) {
-				for _, id := range list {
-					id = strings.TrimPrefix(id, "ast-grep/")
-					if _, ok := got[id]; !ok && !(rp.OwnModule == "" && rule == "tests.mock-edges" && s != "typescript") {
-						t.Errorf("%s: RuleIDs names %s for %s, the pack lacks it (own module %q)", s, id, rule, rp.OwnModule)
-					}
-				}
+				requireRendered(t, got, rp, s, rule, list)
 			}
+		}
+	}
+}
+
+// requireRendered fails for every id of the rule that the rendered pack lacks; without an own module the
+// mock-edges rules of python and ruby are not rendered, by design.
+func requireRendered(t *testing.T, got map[string]map[string]any, rp ruleParams, s, rule string, list []string) {
+	t.Helper()
+	if rp.OwnModule == "" && rule == "tests.mock-edges" && s != "typescript" {
+		return
+	}
+	for _, id := range list {
+		id = strings.TrimPrefix(id, "ast-grep/")
+		if _, ok := got[id]; !ok {
+			t.Errorf("%s: RuleIDs names %s for %s, the pack lacks it (own module %q)", s, id, rule, rp.OwnModule)
 		}
 	}
 }

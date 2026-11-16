@@ -25,6 +25,8 @@ type runner interface {
 
 type execRunner struct{ timeout time.Duration }
 
+// Output runs the command in dir under the runner's timeout and returns its standard output; a failure carries
+// the command line and its standard error.
 func (e execRunner) Output(dir, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()

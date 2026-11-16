@@ -1,0 +1,102 @@
+# pawl rule pack: resilience.bounded-growth. A module-level collection that code writes to needs a cap, a TTL or an
+# eviction rule. Where the growth is bounded by construction, say so above the line:
+#   // ast-grep-ignore: bounded-growth-ts -- filled once at startup from a fixed list
+# (the comment counts as a suppression with a reason).
+id: bounded-growth-go
+language: Go
+severity: error
+message: A package-level collection grows without a declared bound. Cap it, evict, or mark it bounded with a reason.
+rule:
+  kind: var_spec
+  any:
+    - pattern: {context: "var $NAME = map[$K]$V{}", selector: var_spec}
+    - pattern: {context: "var $NAME = make(map[$K]$V)", selector: var_spec}
+    - pattern: {context: "var $NAME = []$T{}", selector: var_spec}
+    - pattern: {context: "var $NAME = make([]$T, $$$)", selector: var_spec}
+  # package level: the enclosing var declaration (grouped or not) sits directly in the file
+  inside:
+    kind: var_declaration
+    stopBy: end
+    inside:
+      kind: source_file
+      stopBy: neighbor
+files: ["**/*.go"]
+ignores: ["**/*_test.go"]
+---
+id: bounded-growth-ts
+language: TypeScript
+severity: error
+message: A module-level collection grows without a declared bound. Cap it, evict, or mark it bounded with a reason.
+rule:
+  any:
+    - pattern: const $NAME = new Map()
+    - pattern: const $NAME = new Map<$$$>()
+    - pattern: const $NAME = new Set()
+    - pattern: const $NAME = new Set<$$$>()
+    - pattern: "const $NAME: $T = []"
+    - pattern: "const $NAME: $T = {}"
+    - pattern: let $NAME = []
+    - pattern: let $NAME = {}
+  inside:
+    any:
+      - kind: program
+      - kind: export_statement
+    stopBy: neighbor
+constraints:
+  NAME:
+    regex: "^[a-z_]"
+files: ["**/*.ts", "**/*.tsx", "**/*.mts"]
+ignores: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/*.d.ts"]
+---
+id: bounded-growth-py
+language: Python
+severity: error
+message: A module-level collection grows without a declared bound. Cap it, evict, or mark it bounded with a reason.
+rule:
+  any:
+    - pattern: $NAME = []
+    - pattern: $NAME = {}
+    - pattern: $NAME = set()
+    - pattern: $NAME = dict()
+    - pattern: $NAME = list()
+    - pattern: "$NAME: $T = []"
+    - pattern: "$NAME: $T = {}"
+  # the assignment's parent is an expression_statement; module level means that statement sits directly in the module
+  inside:
+    kind: expression_statement
+    stopBy: neighbor
+    inside:
+      kind: module
+      stopBy: neighbor
+constraints:
+  NAME:
+    regex: "^[a-z_]"
+files: ["**/*.py"]
+ignores: ["**/test_*.py", "**/*_test.py", "**/tests/**", "**/conftest.py"]
+---
+id: bounded-growth-rb
+language: Ruby
+severity: error
+message: A constant holds a mutable collection without a declared bound. Freeze it, cap it, or mark it bounded with a reason.
+rule:
+  any:
+    - pattern: $NAME = {}
+    - pattern: $NAME = []
+constraints:
+  NAME:
+    regex: "^[A-Z]"
+files: ["**/*.rb"]
+ignores: ["**/*_test.rb", "**/*_spec.rb", "**/test/**", "**/spec/**"]
+---
+id: bounded-growth-rs
+language: Rust
+severity: error
+message: A global mutable container grows without a declared bound. Cap it, evict, or mark it bounded with a reason.
+rule:
+  pattern: "static $NAME: $T = $V;"
+constraints:
+  T:
+    # a lock or lazy cell around a growable collection; a lazily built value of fixed size is not flagged
+    regex: "(Mutex|RwLock|RefCell|Lazy\\w*|OnceLock|OnceCell)<.*(Vec|VecDeque|HashMap|BTreeMap|HashSet|BTreeSet|String)\\b"
+files: ["**/*.rs"]
+ignores: ["**/tests/**"]

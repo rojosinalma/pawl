@@ -1,11 +1,12 @@
 package scaffold
 
 import (
-	"github.com/rojosinalma/pawl/internal/stack/golang"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rojosinalma/pawl/internal/stack/golang"
 
 	"github.com/rojosinalma/pawl/internal/catalog"
 	"github.com/rojosinalma/pawl/internal/manifest"
@@ -169,7 +170,7 @@ func TestHookRunsMakeAndRecords(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("precommit:\n\t"+tc.recipe+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		cmd := execHook(dir, fake)
+		cmd := execHook(t, dir, fake)
 		err := cmd.Run()
 		code := 0
 		if err != nil {
@@ -194,7 +195,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 	if !hasItem(res.Created, hookPath) || !hasItem(res.Created, ratchet.FileName) || !hasItem(res.Created, agentsFile) {
 		t.Errorf("dry run did not report the files: %v", res.Created)
 	}
-	cmd := gitCmd(dir, "config", "core.hooksPath")
+	cmd := gitCmd(t, dir, "config", "core.hooksPath")
 	if out, err := cmd.Output(); err == nil {
 		t.Errorf("dry run set core.hooksPath to %q", out)
 	}

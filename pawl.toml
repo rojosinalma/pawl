@@ -1,0 +1,293 @@
+# pawl manifest: what this project does about every catalog rule. `pawl rules` explains each rule;
+# `pawl check` fails when a rule has neither a step nor a waiver. Project-owned: edit freely.
+
+version = 1
+stacks = ["go", "shell"]
+base = "origin/main"
+
+[project]
+config_module = "internal/config"   # the one place that reads the environment (resilience.config-owner)
+own_module = "github.com/rojosinalma/pawl"      # what tests must not mock (tests.mock-edges)
+test_dirs = ["test"]
+exclude = ["test/fixtures"]          # paths the checks skip (generated code, fixtures), as path prefixes
+
+[budgets]
+file_lines = 800
+complexity = 15
+diff_coverage = 80
+[budgets.pr_lines]
+feature = 800
+bugfix = 200
+hotfix = 50
+refactor = 800
+
+[rings.precommit]
+target = "10s"
+limit = "20s"
+[rings.check]
+target = "10m"
+limit = "15m"
+[rings.nightly]
+target = "20m"
+limit = "30m"
+
+# --- hygiene ---------------------------------------------------------------------------------------------
+# One formatter, and the tree is clean
+[rules."code.format"]
+step = "fmt-check"
+via = ["golangci-lint/gofmt", "golangci-lint/goimports", "shfmt"]
+
+# The stack's linter passes with the project's configuration
+[rules."code.lint"]
+step = "lint"
+via = ["golangci-lint", "shellcheck", "hadolint", "actionlint", "zizmor"]
+
+# The strictest type level the stack offers
+[rules."code.types"]
+step = "lint"
+via = ["golangci-lint/typecheck"]
+gaps = ["shell: shell has no type checker; ShellCheck covers quoting and expansion"]
+
+# Function complexity within budget
+[rules."code.complexity"]
+step = "lint"
+via = ["golangci-lint/gocognit"]
+gaps = ["shell: no complexity tool for shell; a script over 100 lines is rewritten in a structured language"]
+
+# Files within the line budget, shrink-only
+[rules."code.file-size"]
+step = "check"
+via = ["pawl"]
+
+# Layers import one way
+[rules."code.boundaries"]
+waived = "go: no layer boundaries declared yet; declare them under linters.settings.depguard in .golangci.yml, enable depguard, and set step = \"lint\"; shell: shell scripts have no import graph"
+
+# No dead exports or unused code
+[rules."code.dead"]
+step = "lint"
+via = ["golangci-lint/unused", "shellcheck/SC2034"]
+
+# Every error and async result is handled
+[rules."code.dropped-results"]
+step = "lint"
+via = ["golangci-lint/errcheck", "ast-grep/shell-strict-mode"]
+
+# No swallowed exception, no silent default
+[rules."code.swallowed-errors"]
+step = "lint"
+via = ["golangci-lint/nilerr", "golangci-lint/errcheck"]
+gaps = ["shell: shell has no exceptions; strict mode (code.dropped-results) stops on the first failure"]
+
+# No debug output, commented-out code or dangling TODO in production code
+[rules."code.debug-leftovers"]
+step = "lint"
+via = ["golangci-lint/forbidigo"]
+gaps = ["shell: echo is output in shell; no tool separates debugging from output"]
+
+# Names follow the stack's convention and are spelled correctly
+[rules."code.naming"]
+step = "lint"
+via = ["typos", "golangci-lint/revive"]
+gaps = ["shell: no naming lint for shell; ShellCheck covers unassigned and unused variables"]
+
+# --- escape ----------------------------------------------------------------------------------------------
+# Every suppression carries a reason, and the count only shrinks
+[rules."escape.suppressions"]
+step = "check"
+via = ["pawl"]
+
+# Copy-paste blocks never increase
+[rules."escape.duplication"]
+step = "check"
+via = ["jscpd"]
+
+# No test-only branch in production code
+[rules."escape.test-branch"]
+step = "lint"
+via = ["ast-grep/test-branch-go"]
+gaps = ["shell: shell scripts rarely have a test environment; declare one with ast-grep if needed"]
+
+# --- repo ------------------------------------------------------------------------------------------------
+# Nothing private in the repository
+[rules."repo.private"]
+step = "lint"
+via = ["gitleaks", "pawl"]
+
+# Toolchain and dependencies pinned
+[rules."repo.pinned"]
+step = "check"
+via = ["pawl"]
+
+# The pre-commit hook is installed
+[rules."repo.hook"]
+step = "check"
+via = ["pawl"]
+
+# The standard make targets exist
+[rules."repo.targets"]
+step = "check"
+via = ["pawl"]
+
+# CI runs the make targets, actions are pinned
+[rules."repo.ci-shape"]
+step = "check"
+via = ["pawl"]
+
+# --- resilience ------------------------------------------------------------------------------------------
+# Every outbound call has a timeout
+[rules."resilience.timeouts"]
+step = "lint"
+via = ["golangci-lint/noctx", "golangci-lint/bodyclose"]
+gaps = ["shell: wrap long network calls in `timeout`; no static check"]
+
+# A switch over a closed set handles every case
+[rules."resilience.exhaustive"]
+step = "lint"
+via = ["golangci-lint/exhaustive"]
+gaps = ["shell: case statements have no closed set; add `*) exit 1 ;;`"]
+
+# Configuration is read in one module
+[rules."resilience.config-owner"]
+step = "lint"
+via = ["ast-grep/config-owner-go"]
+gaps = ["shell: scripts read the environment by nature"]
+
+# No import cycles
+[rules."resilience.import-cycles"]
+step = "lint"
+via = ["go/compiler"]
+gaps = ["shell: shell scripts have no import graph"]
+
+# Nothing grows without a bound
+[rules."resilience.bounded-growth"]
+step = "lint"
+via = ["ast-grep/bounded-growth-go"]
+gaps = ["shell: shell scripts hold no long-lived state"]
+
+# --- tests -----------------------------------------------------------------------------------------------
+# Tests run in random order, without retries
+[rules."tests.runner"]
+step = "test"
+via = ["go test -shuffle=on", "bats"]
+
+# No focused, skipped or assertion-free test
+[rules."tests.smells"]
+step = "lint"
+via = ["golangci-lint/testifylint", "ast-grep/skip-without-reason-go"]
+gaps = ["shell: no shell tests declared"]
+
+# Changed lines are covered
+[rules."tests.diff-coverage"]
+step = "coverage"
+via = ["diff-cover"]
+gaps = ["shell: no coverage tool for shell"]
+
+# Mutation score never drops
+[rules."tests.mutation"]
+step = "mutation"
+via = ["gremlins"]
+gaps = ["shell: no mutation tool for shell"]
+
+# Tests fake only the edges
+[rules."tests.mock-edges"]
+waived = "go: tests substitute interfaces, which are the declared edges; nothing to detect; shell: no shell tests declared"
+
+# Every declared principle has a required test suite
+[rules."tests.principles"]
+step = "check"
+via = ["pawl"]
+
+# --- drift -----------------------------------------------------------------------------------------------
+# Dependencies audited for known vulnerabilities
+[rules."drift.audit"]
+step = "audit"
+via = ["govulncheck"]
+gaps = ["shell: shell scripts have no dependency manifest"]
+
+# No unused or undeclared dependency
+[rules."drift.unused-deps"]
+step = "lint"
+via = ["go mod tidy -diff"]
+gaps = ["shell: shell scripts have no dependency manifest"]
+
+# Contracts change only with a version bump
+[rules."drift.contracts"]
+waived = "no contract declared; list the schemas and APIs under [[contracts]] in pawl.toml and set step = \"check\""
+
+# The documented surface matches the code
+[rules."drift.docs"]
+waived = "no extractor compares the documented surface with the code; write one as a make step and name it here"
+
+# Pull request size matches the declared work type
+[rules."drift.pr-size"]
+step = "check"
+via = ["pawl"]
+
+# Security lint per stack
+[rules."drift.security"]
+step = "lint"
+via = ["golangci-lint/gosec", "shellcheck", "zizmor", "hadolint", "docker-user"]
+
+# --- speed -----------------------------------------------------------------------------------------------
+# Each ring runs within its budget
+[rules."speed.rings"]
+step = "check"
+via = ["pawl"]
+
+# The pull request ring runs what the change affects
+[rules."speed.affected"]
+step = "check"
+via = ["pawl"]
+
+# --- review ----------------------------------------------------------------------------------------------
+# The simplest thing that works
+[rules."review.simplest"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# The right abstraction
+[rules."review.abstraction"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# Names say what things are
+[rules."review.naming"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# A dependency earns its place
+[rules."review.dependency"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# Domain correctness
+[rules."review.domain"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# Be consistent with the surrounding code
+[rules."review.consistency"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# One self-contained change at a time
+[rules."review.small-changes"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# Errors carry a reason
+[rules."review.errors"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# Avoid mutable global state
+[rules."review.global-state"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# Comments document intent and public behaviour
+[rules."review.comments"]
+waived = "no tool reaches this; it is on the review checklist in AGENTS.md"
+
+# [[principles]]            # a product principle and the test suite that protects it (tests.principles)
+# name = "..."
+# suite = "test/principles/*_test.go"
+
+# [[contracts]]             # a schema or API whose breaking change needs a version bump (drift.contracts)
+# name = "api"
+# path = "docs/openapi.yaml"
+# kind = "openapi"
+# version = "1.0.0"
+

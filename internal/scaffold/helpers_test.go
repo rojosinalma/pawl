@@ -43,7 +43,7 @@ func newProject(t *testing.T, git bool, files map[string]string) string {
 
 func runIn(t *testing.T, dir string, name string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(t.Context(), name, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), testEnv...)
 	out, err := cmd.CombinedOutput()
@@ -151,15 +151,15 @@ func walk(v any, fn func(key string, v any)) {
 }
 
 // execHook prepares the pre-commit hook with a fake pawl.
-func execHook(dir, pawl string) *exec.Cmd {
-	cmd := exec.Command("sh", hookPath)
+func execHook(t *testing.T, dir, pawl string) *exec.Cmd {
+	cmd := exec.CommandContext(t.Context(), "sh", hookPath)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "PAWL="+pawl)
 	return cmd
 }
 
-func gitCmd(dir string, args ...string) *exec.Cmd {
-	cmd := exec.Command("git", args...)
+func gitCmd(t *testing.T, dir string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), testEnv...)
 	return cmd

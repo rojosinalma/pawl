@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,7 +129,7 @@ func TestLoadRejectsUnknownKeysAndVersions(t *testing.T) {
 	if _, err := Load(root); err == nil {
 		t.Error("invalid TOML loaded")
 	}
-	if _, err := Require(t.TempDir()); err != ErrNoManifest {
+	if _, err := Require(t.TempDir()); !errors.Is(err, ErrNoManifest) {
 		t.Errorf("Require without a manifest: %v", err)
 	}
 }

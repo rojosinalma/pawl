@@ -181,29 +181,60 @@ func (m *Manifest) Validate(cat *catalog.Catalog) []Problem {
 	var out []Problem
 	for _, r := range cat.Rules {
 		e, ok := m.Rules[r.ID]
-		switch {
-		case !ok:
-			out = append(out, Problem{r.ID, "missing from the manifest: add a step or a waiver"})
-		case e.Step != "" && e.Waived != "":
-			out = append(out, Problem{r.ID, "has both a step and a waiver; keep one"})
-		case e.Step == "" && e.Waived == "":
-			out = append(out, Problem{r.ID, "has neither a step nor a waiver"})
-		case e.Waived != "" && len(strings.Fields(e.Waived)) < 3:
-			out = append(out, Problem{r.ID, "waiver needs a reason (at least three words)"})
-		case r.IsReview() && e.Step != "":
-			out = append(out, Problem{r.ID, "review rules cannot be enforced by a step; they are the generated checklist"})
+		if msg := ruleProblem(r, e, ok); msg != "" {
+			out = append(out, Problem{r.ID, msg})
 		}
 	}
+	out = append(out, m.unknownRules(cat)...)
+	out = append(out, m.ringProblems()...)
+	if m.Budgets.FileLines <= 0 || m.Budgets.Complexity <= 0 || m.Budgets.DiffCoverage < 0 || m.Budgets.DiffCoverage > 100 {
+		out = append(out, Problem{"", "budgets: file_lines and complexity must be positive, diff_coverage between 0 and 100"})
+	}
+	for _, q := range m.Quarantine {
+		if q.Name == "" || q.Issue == "" {
+			out = append(out, Problem{"", "quarantine entries need a name and an issue link"})
+		}
+	}
+	return out
+}
+
+// ruleProblem returns what is wrong with the manifest entry e of catalog rule r, or "" when it is sound; ok is false
+// when the manifest has no entry for r.
+func ruleProblem(r catalog.Rule, e Rule, ok bool) string {
+	switch {
+	case !ok:
+		return "missing from the manifest: add a step or a waiver"
+	case e.Step != "" && e.Waived != "":
+		return "has both a step and a waiver; keep one"
+	case e.Step == "" && e.Waived == "":
+		return "has neither a step nor a waiver"
+	case e.Waived != "" && len(strings.Fields(e.Waived)) < 3:
+		return "waiver needs a reason (at least three words)"
+	case r.IsReview() && e.Step != "":
+		return "review rules cannot be enforced by a step; they are the generated checklist"
+	}
+	return ""
+}
+
+// unknownRules reports the manifest entries the catalog does not have, sorted by id.
+func (m *Manifest) unknownRules(cat *catalog.Catalog) []Problem {
 	ids := make([]string, 0, len(m.Rules))
 	for id := range m.Rules {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	var out []Problem
 	for _, id := range ids {
 		if _, ok := cat.Get(id); !ok {
 			out = append(out, Problem{id, "is not a catalog rule in this version of pawl"})
 		}
 	}
+	return out
+}
+
+// ringProblems reports rings whose durations do not parse and the standard rings that are missing.
+func (m *Manifest) ringProblems() []Problem {
+	var out []Problem
 	for name, ring := range m.Rings {
 		if _, _, err := ring.Durations(); err != nil {
 			out = append(out, Problem{"", fmt.Sprintf("rings.%s: %v", name, err)})
@@ -212,14 +243,6 @@ func (m *Manifest) Validate(cat *catalog.Catalog) []Problem {
 	for _, name := range []string{"precommit", "check", "nightly"} {
 		if _, ok := m.Rings[name]; !ok {
 			out = append(out, Problem{"", fmt.Sprintf("rings.%s is missing", name)})
-		}
-	}
-	if m.Budgets.FileLines <= 0 || m.Budgets.Complexity <= 0 || m.Budgets.DiffCoverage < 0 || m.Budgets.DiffCoverage > 100 {
-		out = append(out, Problem{"", "budgets: file_lines and complexity must be positive, diff_coverage between 0 and 100"})
-	}
-	for _, q := range m.Quarantine {
-		if q.Name == "" || q.Issue == "" {
-			out = append(out, Problem{"", "quarantine entries need a name and an issue link"})
 		}
 	}
 	return out
@@ -255,34 +278,7 @@ func (m *Manifest) Steps() []string {
 // Write renders the manifest as commented TOML in catalog order and writes it to root/pawl.toml.
 func Write(root string, m *Manifest, cat *catalog.Catalog) error {
 	var b bytes.Buffer
-	b.WriteString("# pawl manifest: what this project does about every catalog rule. `pawl rules` explains each rule;\n")
-	b.WriteString("# `pawl check` fails when a rule has neither a step nor a waiver. Project-owned: edit freely.\n\n")
-	fmt.Fprintf(&b, "version = %d\n", m.Version)
-	fmt.Fprintf(&b, "stacks = %s\n", tomlStrings(m.Stacks))
-	fmt.Fprintf(&b, "base = %q\n\n", m.Base)
-
-	b.WriteString("[project]\n")
-	fmt.Fprintf(&b, "config_module = %q   # the one place that reads the environment (resilience.config-owner)\n", m.Project.ConfigModule)
-	fmt.Fprintf(&b, "own_module = %q      # what tests must not mock (tests.mock-edges)\n", m.Project.OwnModule)
-	fmt.Fprintf(&b, "test_dirs = %s\n", tomlStrings(m.Project.TestDirs))
-	fmt.Fprintf(&b, "exclude = %s          # paths the checks skip (generated code, fixtures), as path prefixes\n\n", tomlStrings(m.Project.Exclude))
-
-	b.WriteString("[budgets]\n")
-	fmt.Fprintf(&b, "file_lines = %d\n", m.Budgets.FileLines)
-	fmt.Fprintf(&b, "complexity = %d\n", m.Budgets.Complexity)
-	fmt.Fprintf(&b, "diff_coverage = %d\n", m.Budgets.DiffCoverage)
-	b.WriteString("[budgets.pr_lines]\n")
-	for _, k := range []string{"feature", "bugfix", "hotfix", "refactor"} {
-		fmt.Fprintf(&b, "%s = %d\n", k, m.Budgets.PRLines[k])
-	}
-	b.WriteString("\n")
-
-	for _, name := range []string{"precommit", "check", "nightly"} {
-		r := m.Rings[name]
-		fmt.Fprintf(&b, "[rings.%s]\ntarget = %q\nlimit = %q\n", name, r.Target, r.Limit)
-	}
-	b.WriteString("\n")
-
+	writeSettings(&b, m)
 	for _, class := range cat.Classes() {
 		fmt.Fprintf(&b, "# --- %s %s\n", class, strings.Repeat("-", 100-len(class)))
 		for _, r := range cat.ByClass(class) {
@@ -290,40 +286,79 @@ func Write(root string, m *Manifest, cat *catalog.Catalog) error {
 			if !ok {
 				continue // Validate reports a rule the manifest lacks; Write does not invent an entry for it
 			}
-			fmt.Fprintf(&b, "# %s\n[rules.%q]\n", r.Title, r.ID)
-			if e.Step != "" {
-				fmt.Fprintf(&b, "step = %q\n", e.Step)
-				if len(e.Via) > 0 {
-					fmt.Fprintf(&b, "via = %s\n", tomlStrings(e.Via))
-				}
-				if len(e.Gaps) > 0 {
-					fmt.Fprintf(&b, "gaps = %s\n", tomlStrings(e.Gaps))
-				}
-			} else {
-				fmt.Fprintf(&b, "waived = %q\n", e.Waived)
-			}
-			b.WriteString("\n")
+			writeRule(&b, r, e)
 		}
 	}
+	writeLists(&b, m)
+	return os.WriteFile(filepath.Join(root, FileName), b.Bytes(), 0o644)
+}
 
-	if len(m.Principles) > 0 {
-		for _, p := range m.Principles {
-			fmt.Fprintf(&b, "[[principles]]\nname = %q\nsuite = %q\n\n", p.Name, p.Suite)
+// writeSettings writes everything above the rules: the header, the project, the budgets and the rings.
+func writeSettings(b *bytes.Buffer, m *Manifest) {
+	b.WriteString("# pawl manifest: what this project does about every catalog rule. `pawl rules` explains each rule;\n")
+	b.WriteString("# `pawl check` fails when a rule has neither a step nor a waiver. Project-owned: edit freely.\n\n")
+	fmt.Fprintf(b, "version = %d\n", m.Version)
+	fmt.Fprintf(b, "stacks = %s\n", tomlStrings(m.Stacks))
+	fmt.Fprintf(b, "base = %q\n\n", m.Base)
+
+	b.WriteString("[project]\n")
+	fmt.Fprintf(b, "config_module = %q   # the one place that reads the environment (resilience.config-owner)\n", m.Project.ConfigModule)
+	fmt.Fprintf(b, "own_module = %q      # what tests must not mock (tests.mock-edges)\n", m.Project.OwnModule)
+	fmt.Fprintf(b, "test_dirs = %s\n", tomlStrings(m.Project.TestDirs))
+	fmt.Fprintf(b, "exclude = %s          # paths the checks skip (generated code, fixtures), as path prefixes\n\n", tomlStrings(m.Project.Exclude))
+
+	b.WriteString("[budgets]\n")
+	fmt.Fprintf(b, "file_lines = %d\n", m.Budgets.FileLines)
+	fmt.Fprintf(b, "complexity = %d\n", m.Budgets.Complexity)
+	fmt.Fprintf(b, "diff_coverage = %d\n", m.Budgets.DiffCoverage)
+	b.WriteString("[budgets.pr_lines]\n")
+	for _, k := range []string{"feature", "bugfix", "hotfix", "refactor"} {
+		fmt.Fprintf(b, "%s = %d\n", k, m.Budgets.PRLines[k])
+	}
+	b.WriteString("\n")
+
+	for _, name := range []string{"precommit", "check", "nightly"} {
+		r := m.Rings[name]
+		fmt.Fprintf(b, "[rings.%s]\ntarget = %q\nlimit = %q\n", name, r.Target, r.Limit)
+	}
+	b.WriteString("\n")
+}
+
+// writeRule writes the entry of one catalog rule under its title.
+func writeRule(b *bytes.Buffer, r catalog.Rule, e Rule) {
+	fmt.Fprintf(b, "# %s\n[rules.%q]\n", r.Title, r.ID)
+	if e.Step != "" {
+		fmt.Fprintf(b, "step = %q\n", e.Step)
+		if len(e.Via) > 0 {
+			fmt.Fprintf(b, "via = %s\n", tomlStrings(e.Via))
+		}
+		if len(e.Gaps) > 0 {
+			fmt.Fprintf(b, "gaps = %s\n", tomlStrings(e.Gaps))
 		}
 	} else {
+		fmt.Fprintf(b, "waived = %q\n", e.Waived)
+	}
+	b.WriteString("\n")
+}
+
+// writeLists writes the principles, contracts and quarantine; an empty principles or contracts list is written as a
+// commented example, so the project sees the key exists.
+func writeLists(b *bytes.Buffer, m *Manifest) {
+	for _, p := range m.Principles {
+		fmt.Fprintf(b, "[[principles]]\nname = %q\nsuite = %q\n\n", p.Name, p.Suite)
+	}
+	if len(m.Principles) == 0 {
 		b.WriteString("# [[principles]]            # a product principle and the test suite that protects it (tests.principles)\n# name = \"...\"\n# suite = \"test/principles/*_test.go\"\n\n")
 	}
-	if len(m.Contracts) > 0 {
-		for _, c := range m.Contracts {
-			fmt.Fprintf(&b, "[[contracts]]\nname = %q\npath = %q\nkind = %q\nversion = %q\n\n", c.Name, c.Path, c.Kind, c.Version)
-		}
-	} else {
+	for _, c := range m.Contracts {
+		fmt.Fprintf(b, "[[contracts]]\nname = %q\npath = %q\nkind = %q\nversion = %q\n\n", c.Name, c.Path, c.Kind, c.Version)
+	}
+	if len(m.Contracts) == 0 {
 		b.WriteString("# [[contracts]]             # a schema or API whose breaking change needs a version bump (drift.contracts)\n# name = \"api\"\n# path = \"docs/openapi.yaml\"\n# kind = \"openapi\"\n# version = \"1.0.0\"\n\n")
 	}
 	for _, q := range m.Quarantine {
-		fmt.Fprintf(&b, "[[quarantine]]\nname = %q\nissue = %q\nsince = %q\n\n", q.Name, q.Issue, q.Since)
+		fmt.Fprintf(b, "[[quarantine]]\nname = %q\nissue = %q\nsince = %q\n\n", q.Name, q.Issue, q.Since)
 	}
-	return os.WriteFile(filepath.Join(root, FileName), b.Bytes(), 0o644)
 }
 
 func tomlStrings(items []string) string {

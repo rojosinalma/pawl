@@ -18,6 +18,7 @@ import (
 // Format of a configuration file.
 type Format string
 
+// The formats LoadConfig parses.
 const (
 	YAML  Format = "yaml"
 	JSON  Format = "json"
@@ -88,37 +89,49 @@ func normalizeYAML(v any) any {
 // StripJSONC removes // and /* */ comments and trailing commas from JSONC so encoding/json can parse it.
 func StripJSONC(raw []byte) []byte {
 	var out []byte
-	inString := false
 	for i := 0; i < len(raw); i++ {
 		c := raw[i]
 		switch {
-		case inString:
-			out = append(out, c)
-			if c == '\\' && i+1 < len(raw) {
-				out = append(out, raw[i+1])
-				i++
-			} else if c == '"' {
-				inString = false
-			}
 		case c == '"':
-			inString = true
-			out = append(out, c)
+			end := stringEnd(raw, i)
+			out = append(out, raw[i:end+1]...)
+			i = end
 		case c == '/' && i+1 < len(raw) && raw[i+1] == '/':
 			for i < len(raw) && raw[i] != '\n' {
 				i++
 			}
 			out = append(out, '\n')
 		case c == '/' && i+1 < len(raw) && raw[i+1] == '*':
-			i += 2
-			for i+1 < len(raw) && !(raw[i] == '*' && raw[i+1] == '/') {
-				i++
-			}
-			i++
+			i = blockCommentEnd(raw, i)
 		default:
 			out = append(out, c)
 		}
 	}
 	return dropTrailingCommas(out)
+}
+
+// stringEnd returns the index of the quote closing the string that opens at start (escapes skipped), or the last
+// index when the string is unterminated.
+func stringEnd(raw []byte, start int) int {
+	for j := start + 1; j < len(raw); j++ {
+		switch raw[j] {
+		case '\\':
+			j++
+		case '"':
+			return j
+		}
+	}
+	return len(raw) - 1
+}
+
+// blockCommentEnd returns the index of the slash closing the block comment that opens at start; an unterminated
+// comment runs to the end of the input.
+func blockCommentEnd(raw []byte, start int) int {
+	j := start + 2
+	for j+1 < len(raw) && (raw[j] != '*' || raw[j+1] != '/') {
+		j++
+	}
+	return j + 1
 }
 
 // dropTrailingCommas removes a comma followed only by whitespace and a closing } or ], outside strings.

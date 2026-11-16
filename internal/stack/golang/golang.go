@@ -24,13 +24,18 @@ const (
 	GremlinsVersion   = "0.6.0"
 )
 
+// Adapter is the stack.Adapter of this stack.
 type Adapter struct{}
 
 func init() { stack.Register(Adapter{}) }
 
-func (Adapter) Name() string  { return "go" }
+// Name implements stack.Adapter.
+func (Adapter) Name() string { return "go" }
+
+// Title implements stack.Adapter.
 func (Adapter) Title() string { return "Go" }
 
+// Detect implements stack.Adapter.
 func (Adapter) Detect(files []string) bool {
 	for _, f := range files {
 		if f == "go.mod" || strings.HasSuffix(f, ".go") {
@@ -42,6 +47,7 @@ func (Adapter) Detect(files []string) bool {
 
 var modulePattern = regexp.MustCompile(`(?m)^module\s+(\S+)`)
 
+// Facts implements stack.Adapter.
 func (Adapter) Facts(root string) map[string]string {
 	facts := map[string]string{}
 	raw, err := os.ReadFile(filepath.Join(root, "go.mod"))
@@ -53,6 +59,7 @@ func (Adapter) Facts(root string) map[string]string {
 	return facts
 }
 
+// Tools implements stack.Adapter.
 func (Adapter) Tools() []stack.Tool {
 	return []stack.Tool{
 		{Name: "go", Check: []string{"go", "version"}, Install: "the version in go.mod; mise use go, or https://go.dev/dl", Rings: []string{"precommit", "check"}},
@@ -61,13 +68,18 @@ func (Adapter) Tools() []stack.Tool {
 	}
 }
 
+// SourceGlobs implements stack.Adapter.
 func (Adapter) SourceGlobs() []string { return []string{"**/*.go"} }
-func (Adapter) TestGlobs() []string   { return []string{"**/*_test.go"} }
 
+// TestGlobs implements stack.Adapter.
+func (Adapter) TestGlobs() []string { return []string{"**/*_test.go"} }
+
+// Pins implements stack.Adapter.
 func (Adapter) Pins() []stack.Pin {
 	return []stack.Pin{{What: "Go version (go.mod `go` directive)", Files: []string{"go.mod"}, Locks: []string{"go.sum"}}}
 }
 
+// Suppressions implements stack.Adapter.
 func (Adapter) Suppressions() []stack.Suppression {
 	return []stack.Suppression{
 		{Kind: "nolint", Pattern: regexp.MustCompile(`//\s*nolint(?::[\w,./-]+)?(?:\s*//\s*(?P<reason>.+))?`), Globs: []string{"**/*.go"}},
@@ -76,11 +88,13 @@ func (Adapter) Suppressions() []stack.Suppression {
 	}
 }
 
+// Configs implements stack.Adapter.
 func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	cfg := strings.ReplaceAll(golangciConfig, "{{complexity}}", strconv.Itoa(p.Complexity))
 	return []stack.ConfigFile{{Path: ".golangci.yml", Content: cfg}}
 }
 
+// Rules implements stack.Adapter.
 func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	lint := func(via ...string) stack.Enforcement { return stack.Enforcement{Step: "lint", Via: via} }
 	sg := common.RuleIDs("go")
@@ -112,6 +126,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	}
 }
 
+// Verifiers implements stack.Adapter.
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 	f, y := ".golangci.yml", stack.YAML
 	on := func(rule, linter string) stack.Verifier {
@@ -166,6 +181,7 @@ func linterOn(linter string) func(stack.Verify) []report.Finding {
 	}
 }
 
+// Make implements stack.Adapter.
 func (Adapter) Make(stack.Params) stack.Make {
 	return stack.Make{
 		Vars: []string{

@@ -22,7 +22,7 @@ func write(t *testing.T, root, rel, content string) {
 
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -49,9 +49,18 @@ func pawl(t *testing.T, root string, args ...string) (stdout, stderr string, cod
 	return out.String(), errOut.String(), code
 }
 
-func TestInitThenRulesBaselineAndCheck(t *testing.T) {
+// initRepo is goRepo after a successful `pawl init`.
+func initRepo(t *testing.T) string {
+	t.Helper()
 	root := goRepo(t)
+	if out, stderr, code := pawl(t, root, "init"); code != 0 {
+		t.Fatalf("init failed (%d): %s%s", code, out, stderr)
+	}
+	return root
+}
 
+func TestInitReportsWhatItWroteAndRunsOnce(t *testing.T) {
+	root := goRepo(t)
 	out, stderr, code := pawl(t, root, "init")
 	if code != 0 {
 		t.Fatalf("init failed (%d): %s%s", code, out, stderr)
@@ -64,8 +73,11 @@ func TestInitThenRulesBaselineAndCheck(t *testing.T) {
 	if _, stderr, code := pawl(t, root, "init"); code != 1 || !strings.Contains(stderr, "pawl.toml exists") {
 		t.Errorf("second init: code %d, stderr %q", code, stderr)
 	}
+}
 
-	out, _, code = pawl(t, root, "rules")
+func TestRulesListsShowsAndSyncs(t *testing.T) {
+	root := initRepo(t)
+	out, _, code := pawl(t, root, "rules")
 	if code != 0 || !strings.Contains(out, "HYGIENE") || !strings.Contains(out, "code.format") || !strings.Contains(out, "make fmt-check") {
 		t.Errorf("rules (%d):\n%s", code, out)
 	}
@@ -83,10 +95,13 @@ func TestInitThenRulesBaselineAndCheck(t *testing.T) {
 	if out, _, code := pawl(t, root, "rules", "sync"); code != 0 || !strings.Contains(out, "up to date") {
 		t.Errorf("rules sync (%d): %s", code, out)
 	}
+}
 
+func TestBaselineThenCheckPassOnAFreshInit(t *testing.T) {
+	root := initRepo(t)
 	git(t, root, "add", "-A")
 	git(t, root, "commit", "-q", "--no-verify", "-m", "pawl init")
-	out, stderr, code = pawl(t, root, "baseline")
+	out, stderr, code := pawl(t, root, "baseline")
 	if code != 0 || !strings.Contains(out, "wrote .pawl/baseline.json") {
 		t.Fatalf("baseline (%d): %s%s", code, out, stderr)
 	}
@@ -162,11 +177,8 @@ func TestCommandsNeedAManifest(t *testing.T) {
 	}
 }
 
-func TestAffectedRecordBudgetAndStatus(t *testing.T) {
-	root := goRepo(t)
-	if _, stderr, code := pawl(t, root, "init"); code != 0 {
-		t.Fatal(stderr)
-	}
+func TestAffectedPrintsTheScope(t *testing.T) {
+	root := initRepo(t)
 	t.Setenv("PAWL_FULL", "1")
 	if out, stderr, code := pawl(t, root, "affected", "go"); code != 0 || strings.TrimSpace(out) != "./..." {
 		t.Errorf("affected go: %d %q %q", code, out, stderr)
@@ -174,6 +186,11 @@ func TestAffectedRecordBudgetAndStatus(t *testing.T) {
 	if _, stderr, code := pawl(t, root, "affected", "cobol"); code != 1 || stderr == "" {
 		t.Errorf("affected cobol: %d %q", code, stderr)
 	}
+}
+
+func TestRecordThenBudgetOverTheLimit(t *testing.T) {
+	root := initRepo(t)
+	t.Setenv("PAWL_FULL", "1")
 	for _, secs := range []string{"25", "26", "27"} {
 		if _, stderr, code := pawl(t, root, "record", "precommit", secs); code != 0 {
 			t.Fatalf("record: %d %q", code, stderr)
@@ -186,6 +203,11 @@ func TestAffectedRecordBudgetAndStatus(t *testing.T) {
 	if code != 1 || !strings.Contains(out, "speed.rings") || !strings.Contains(out, "limit") {
 		t.Errorf("budget over the limit (%d):\n%s", code, out)
 	}
+}
+
+func TestStatusAndVersion(t *testing.T) {
+	root := initRepo(t)
+	t.Setenv("PAWL_FULL", "1")
 	if out, stderr, code := pawl(t, root, "status"); code != 0 || out == "" {
 		t.Errorf("status without a remote: %d %q %q", code, out, stderr)
 	}

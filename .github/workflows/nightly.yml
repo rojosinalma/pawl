@@ -1,0 +1,57 @@
+# pawl: the nightly ring. Everything slow (mutation, audits, docs drift, ring budgets) on the whole tree.
+# Project-owned: edit freely. A failure opens, or comments on, one issue titled "nightly failed".
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  nightly:
+    name: nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write # open or comment on the "nightly failed" issue
+    env:
+      PAWL_FULL: "1"
+      PAWL_BASE: origin/main
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+      - name: make nightly
+        run: make nightly
+      - name: Report the failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: nightly failed
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          number="$(gh issue list --state open --search "in:title ${TITLE}" --json number,title \
+            --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -n 1)"
+          if [ -n "${number}" ]; then
+            gh issue comment "${number}" --body "Failed again: ${RUN_URL}"
+          else
+            gh issue create --title "${TITLE}" --body "The nightly ring failed: ${RUN_URL}"
+          fi

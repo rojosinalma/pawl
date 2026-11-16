@@ -1,0 +1,27 @@
+# pawl: optional AI review. Never a required check.
+# Off until the project adds a trigger (for example pull_request) and the secret the chosen action needs.
+# To enable it, replace the placeholder step with one of these actions, pinned to a full commit SHA:
+#   - the OpenCode GitHub action (https://opencode.ai/docs/github)
+#   - the Claude Code action (https://github.com/anthropics/claude-code-action)
+#   - PR-Agent (https://github.com/qodo-ai/pr-agent)
+# Give the job only the permissions the action documents (usually pull-requests: write).
+name: review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: How to enable the AI review
+        run: echo "AI review is off. See the comment at the top of .github/workflows/review.yml to enable it."

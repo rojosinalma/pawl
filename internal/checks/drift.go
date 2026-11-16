@@ -2,12 +2,14 @@ package checks
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -17,6 +19,9 @@ import (
 	"github.com/rojosinalma/pawl/internal/report"
 	"github.com/rojosinalma/pawl/internal/stack"
 )
+
+// gitDiffTimeout bounds the local git diff behind the PR size budget.
+const gitDiffTimeout = time.Minute
 
 // workTypeEnv overrides the work type the branch name implies, for branches that do not follow the prefixes.
 const workTypeEnv = "PAWL_WORK_TYPE"
@@ -167,7 +172,9 @@ func (r *run) workType() string {
 // changedLines counts added and deleted lines against base, without lockfiles and the baseline: both change by
 // machine, and counting them would punish a dependency bump or a ratchet update.
 func changedLines(root, base string) (int, error) {
-	cmd := exec.Command("git", "diff", "--numstat", base, "--")
+	ctx, cancel := context.WithTimeout(context.Background(), gitDiffTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "diff", "--numstat", base, "--")
 	cmd.Dir = root
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

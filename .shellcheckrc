@@ -1,0 +1,8 @@
+# ShellCheck configuration written by pawl. The optional checks follow the Google Shell Style Guide.
+external-sources=true
+enable=require-double-brackets
+enable=require-variable-braces
+enable=deprecate-which
+enable=avoid-nullary-conditions
+enable=check-unassigned-uppercase
+enable=add-default-case

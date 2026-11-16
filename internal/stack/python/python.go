@@ -24,13 +24,18 @@ const (
 	MutmutVersion   = "3.8.1"
 )
 
+// Adapter is the stack.Adapter of this stack.
 type Adapter struct{}
 
 func init() { stack.Register(Adapter{}) }
 
-func (Adapter) Name() string  { return "python" }
+// Name implements stack.Adapter.
+func (Adapter) Name() string { return "python" }
+
+// Title implements stack.Adapter.
 func (Adapter) Title() string { return "Python" }
 
+// Detect implements stack.Adapter.
 func (Adapter) Detect(files []string) bool {
 	for _, f := range files {
 		if f == "pyproject.toml" || f == "setup.py" || f == "requirements.txt" || strings.HasSuffix(f, ".py") {
@@ -40,6 +45,7 @@ func (Adapter) Detect(files []string) bool {
 	return false
 }
 
+// Facts implements stack.Adapter.
 func (Adapter) Facts(root string) map[string]string {
 	facts := map[string]string{"runner": ""}
 	if _, err := os.Stat(filepath.Join(root, "uv.lock")); err == nil {
@@ -67,6 +73,7 @@ func (Adapter) Facts(root string) map[string]string {
 	return facts
 }
 
+// Tools implements stack.Adapter.
 func (Adapter) Tools() []stack.Tool {
 	return []stack.Tool{
 		{Name: "python", Check: []string{"python", "--version"}, Install: "the version in .python-version; mise use python", Rings: []string{"precommit", "check"}},
@@ -79,11 +86,15 @@ func (Adapter) Tools() []stack.Tool {
 	}
 }
 
+// SourceGlobs implements stack.Adapter.
 func (Adapter) SourceGlobs() []string { return []string{"**/*.py", "**/*.pyi"} }
+
+// TestGlobs implements stack.Adapter.
 func (Adapter) TestGlobs() []string {
 	return []string{"**/test_*.py", "**/*_test.py", "**/tests/**", "**/conftest.py"}
 }
 
+// Pins implements stack.Adapter.
 func (Adapter) Pins() []stack.Pin {
 	return []stack.Pin{{
 		What:  "Python version (.python-version)",
@@ -92,6 +103,7 @@ func (Adapter) Pins() []stack.Pin {
 	}}
 }
 
+// Suppressions implements stack.Adapter.
 func (Adapter) Suppressions() []stack.Suppression {
 	globs := []string{"**/*.py", "**/*.pyi"}
 	return []stack.Suppression{
@@ -102,6 +114,7 @@ func (Adapter) Suppressions() []stack.Suppression {
 	}
 }
 
+// Configs implements stack.Adapter.
 func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	out := []stack.ConfigFile{
 		{Path: "pyrightconfig.json", Content: pyrightConfig},
@@ -127,6 +140,7 @@ dev = [
 ]
 `
 
+// Rules implements stack.Adapter.
 func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	lint := func(via ...string) stack.Enforcement { return stack.Enforcement{Step: "lint", Via: via} }
 	sg := common.RuleIDs("python")
@@ -158,6 +172,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 	}
 }
 
+// Verifiers implements stack.Adapter.
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 	f, t := "ruff.toml", stack.TOML
 	prefix := "lint"
@@ -199,22 +214,34 @@ func ruffSelects(file string, format stack.Format, prefix, code string) func(sta
 		if err != nil || cfg == nil {
 			return nil // Exists() reports the missing file
 		}
-		ok := false
-		for _, s := range append(list(cfg, prefix+".select"), list(cfg, prefix+".extend-select")...) {
-			if covers(s, code) {
-				ok = true
-			}
-		}
-		if !ok {
+		if !ruffSelected(cfg, prefix, code) {
 			return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s.select must include %q for %s", prefix, code, v.Via).WithFix("add it, or waive the rule in pawl.toml with a reason")}
 		}
-		for _, ig := range append(list(cfg, prefix+".ignore"), list(cfg, prefix+".extend-ignore")...) {
-			if covers(ig, code) || covers(code, ig) {
-				return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s.ignore lists %q, which turns %s off", prefix, ig, v.Via).WithFix("remove it, or waive the rule in pawl.toml with a reason")}
-			}
+		if ig, ok := ruffIgnored(cfg, prefix, code); ok {
+			return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s.ignore lists %q, which turns %s off", prefix, ig, v.Via).WithFix("remove it, or waive the rule in pawl.toml with a reason")}
 		}
 		return nil
 	}
+}
+
+// ruffSelected reports whether select or extend-select has a selector covering the code.
+func ruffSelected(cfg *stack.Config, prefix, code string) bool {
+	for _, s := range append(list(cfg, prefix+".select"), list(cfg, prefix+".extend-select")...) {
+		if covers(s, code) {
+			return true
+		}
+	}
+	return false
+}
+
+// ruffIgnored returns the first ignore or extend-ignore entry that covers the code or that the code covers.
+func ruffIgnored(cfg *stack.Config, prefix, code string) (string, bool) {
+	for _, ig := range append(list(cfg, prefix+".ignore"), list(cfg, prefix+".extend-ignore")...) {
+		if covers(ig, code) || covers(code, ig) {
+			return ig, true
+		}
+	}
+	return "", false
 }
 
 var ruffCode = regexp.MustCompile(`^([A-Z]+)([0-9]*)$`)
@@ -255,6 +282,7 @@ func toString(v any) string {
 	return ""
 }
 
+// Make implements stack.Adapter.
 func (Adapter) Make(p stack.Params) stack.Make {
 	run := p.Facts["runner"]
 	src := p.Facts["source_dir"]
@@ -310,11 +338,11 @@ select = [
   "N",        # pep8-naming
   "T20",      # print statements
   "ERA",      # commented-out code
-  "TD",       # TODO format (TD003: needs an issue link)
+  "TD",       # flake8-todos: a to-do comment needs an issue link (TD003)
   "PT",       # pytest style
   "RUF",      # Ruff's own (RUF006: dangling asyncio task)
 ]
-ignore = ["TD002"]   # TODO author is not required; the link is
+ignore = ["TD002"]   # the author of a to-do comment is not required; the link is
 
 [lint.mccabe]
 max-complexity = {{complexity}}

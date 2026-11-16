@@ -1,0 +1,2 @@
+# zizmor configuration written by pawl. Per rule: rules.<id>.disable, rules.<id>.ignore, rules.<id>.config.
+rules: {}

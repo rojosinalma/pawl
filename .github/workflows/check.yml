@@ -1,0 +1,45 @@
+# pawl: the check ring. `make check` is the merge gate; `make coverage` checks the changed lines.
+# Project-owned: edit freely. Runs on pull requests, on the default branch and in a merge queue.
+name: check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PAWL_BASE: origin/${{ github.base_ref || 'main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+      - name: make check
+        run: make check
+      - name: make coverage
+        run: make coverage
+      - name: Annotate the findings
+        if: failure()
+        run: go run ./cmd/pawl check --format github

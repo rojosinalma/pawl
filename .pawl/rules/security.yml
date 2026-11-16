@@ -1,0 +1,31 @@
+# pawl rule pack: drift.security for the stacks whose linter has no security set.
+id: dynamic-code-ts
+language: TypeScript
+severity: error
+message: Dynamic code execution from a string is an injection path.
+rule:
+  any:
+    - pattern: eval($CODE)
+    - pattern: new Function($$$)
+    - pattern: execSync(`$$$`)
+    - pattern: exec(`$$$`)
+    - pattern: child_process.exec(`$$$`)
+files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.js", "**/*.mjs"]
+ignores: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**"]
+---
+id: dynamic-code-rb
+language: Ruby
+severity: error
+message: Dynamic code or shell execution with interpolated input is an injection path.
+rule:
+  any:
+    - pattern: eval($CODE)
+    - pattern: instance_eval($CODE)
+    - pattern: class_eval($CODE)
+    - pattern: Marshal.load($DATA)
+    - pattern: YAML.load($DATA)
+    - pattern: system("$$$#{$$$}$$$")
+    - pattern: "`$$$#{$$$}$$$`"
+    - pattern: Kernel.open($X)
+files: ["**/*.rb"]
+ignores: ["**/*_test.rb", "**/*_spec.rb", "**/test/**", "**/spec/**"]

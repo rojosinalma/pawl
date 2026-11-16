@@ -126,7 +126,7 @@ func TestSuppressionsSkippedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cur.Offenders["escape.suppressions"]; len(got) != 1 || got[0] != "deploy.yaml:1 gitleaks-allow" {
+	if got := cur.Offenders["escape.suppressions"]; len(got) != 1 || got[0] != "deploy.yaml gitleaks-allow" {
 		t.Fatalf("offenders = %v", got)
 	}
 }
@@ -158,7 +158,7 @@ func TestMetricsMeasured(t *testing.T) {
 	}
 	want := map[string][]string{
 		"code.file-size":   {"big.go", "big_test.go"},
-		"code.todo-links":  {"todo.go:3"},
+		"code.todo-links":  {"todo.go"},
 		"tests.quarantine": {"TestFlaky"},
 	}
 	for metric, offenders := range want {
@@ -184,6 +184,29 @@ func TestMetricsOmittedWhenWaived(t *testing.T) {
 	for _, metric := range []string{"code.file-size", "code.todo-links"} {
 		if _, ok := cur.Metrics[metric]; ok {
 			t.Errorf("%s measured although its rule is waived", metric)
+		}
+	}
+}
+
+func TestDirectivesInsideStringLiteralsAreNotSuppressions(t *testing.T) {
+	directive := "//" + "nolint:errcheck"
+	cases := []struct {
+		line string
+		want bool
+	}{
+		{"x := call() " + directive + " // the error is logged by the caller", false},
+		{`{"` + directive + `", "", true},`, true},
+		{"re := regexp.MustCompile(`" + directive + "`)", true},
+		{"msg := '" + directive + "'", true},
+		{"// don't care " + directive, false},
+		{`s := "a" ` + directive, false},
+		{`{Line: "x() ` + directive + ` // the reason runs to the end", Kind: "nolint"},`, true},
+		{`s := "a\"` + directive + `"`, true},
+	}
+	for _, c := range cases {
+		start := strings.Index(c.line, directive)
+		if got := quoted(c.line, start); got != c.want {
+			t.Errorf("quoted(%q) = %v, want %v", c.line, got, c.want)
 		}
 	}
 }

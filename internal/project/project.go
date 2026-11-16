@@ -219,38 +219,42 @@ func (p *Project) DefaultRules() map[string]manifest.Rule {
 			out[r.ID] = manifest.Rule{Waived: "no tool reaches this; it is on the review checklist in AGENTS.md"}
 			continue
 		}
-		var rule manifest.Rule
-		var reasons []string
-		for i, a := range p.Adapters {
-			e, ok := per[i][r.ID]
-			if !ok {
-				continue
-			}
-			if e.Step == "" {
-				reasons = append(reasons, e.Waived)
-				continue
-			}
-			if rule.Step == "" {
-				rule.Step = e.Step
-			}
-			for _, v := range e.Via {
-				if !contains(rule.Via, v) {
-					rule.Via = append(rule.Via, v)
-				}
-			}
-			_ = a
-		}
-		switch {
-		case rule.Step != "":
-			rule.Gaps = reasons
-		case len(reasons) > 0:
-			rule.Waived = strings.Join(reasons, "; ")
-		default:
-			rule.Waived = "no stack of this project has a tool for it yet"
-		}
-		out[r.ID] = rule
+		out[r.ID] = mergeEnforcements(r.ID, per)
 	}
 	return out
+}
+
+// mergeEnforcements joins what each adapter does about one rule, in adapter order, into its manifest entry.
+func mergeEnforcements(id string, per []map[string]stack.Enforcement) manifest.Rule {
+	var rule manifest.Rule
+	var reasons []string
+	for _, rules := range per {
+		e, ok := rules[id]
+		if !ok {
+			continue
+		}
+		if e.Step == "" {
+			reasons = append(reasons, e.Waived)
+			continue
+		}
+		if rule.Step == "" {
+			rule.Step = e.Step
+		}
+		for _, v := range e.Via {
+			if !contains(rule.Via, v) {
+				rule.Via = append(rule.Via, v)
+			}
+		}
+	}
+	switch {
+	case rule.Step != "":
+		rule.Gaps = reasons
+	case len(reasons) > 0:
+		rule.Waived = strings.Join(reasons, "; ")
+	default:
+		rule.Waived = "no stack of this project has a tool for it yet"
+	}
+	return rule
 }
 
 func contains(list []string, s string) bool {

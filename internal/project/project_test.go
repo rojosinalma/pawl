@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,7 +104,7 @@ func TestDefaultRulesCoverTheCatalogAndRecordGaps(t *testing.T) {
 
 func TestLoadNeedsAManifestAndAppliesExcludes(t *testing.T) {
 	root := goShellProject(t)
-	if _, err := Load(root); err != manifest.ErrNoManifest {
+	if _, err := Load(root); !errors.Is(err, manifest.ErrNoManifest) {
 		t.Fatalf("Load without a manifest: %v", err)
 	}
 	p, err := Detect(root, nil)

@@ -12,6 +12,7 @@ import (
 // Severity of a finding: errors fail the run, warnings are printed.
 type Severity string
 
+// The severities a finding can have; only Error makes the run fail.
 const (
 	Error   Severity = "error"
 	Warning Severity = "warning"
@@ -104,6 +105,7 @@ func (r *Report) Sort() {
 // Format names an output format.
 type Format string
 
+// The output formats: Text for people, JSON for scripts, SARIF for code scanning, GitHub for workflow annotations.
 const (
 	Text   Format = "text"
 	JSON   Format = "json"
@@ -131,51 +133,42 @@ func (r *Report) Write(w io.Writer, format Format) error {
 	case SARIF:
 		return writeSARIF(w, r)
 	case GitHub:
-		for _, f := range r.Findings {
-			level := "error"
-			if f.Severity != Error {
-				level = "warning"
-			}
-			loc := ""
-			if f.File != "" {
-				loc = fmt.Sprintf(" file=%s", f.File)
-				if f.Line > 0 {
-					loc += fmt.Sprintf(",line=%d", f.Line)
-				}
-			}
-			msg := f.Message
-			if f.Fix != "" {
-				msg += " Fix: " + f.Fix
-			}
-			fmt.Fprintf(w, "::%s%s,title=%s::%s\n", level, loc, f.RuleID, escapeGH(msg))
-		}
+		writeGitHub(w, r)
 		return nil
 	default:
 		return writeText(w, r)
 	}
 }
 
+// writeGitHub prints one workflow command per finding; GitHub has no note level, so notes show as warnings.
+func writeGitHub(w io.Writer, r *Report) {
+	for _, f := range r.Findings {
+		level := "error"
+		if f.Severity != Error {
+			level = "warning"
+		}
+		loc := ""
+		if f.File != "" {
+			loc = fmt.Sprintf(" file=%s", f.File)
+			if f.Line > 0 {
+				loc += fmt.Sprintf(",line=%d", f.Line)
+			}
+		}
+		fmt.Fprintf(w, "::%s%s,title=%s::%s\n", level, loc, f.RuleID, escapeGH(messageWithFix(f)))
+	}
+}
+
+// messageWithFix is the message of the formats that have no separate field for the fix.
+func messageWithFix(f Finding) string {
+	if f.Fix != "" {
+		return f.Message + " Fix: " + f.Fix
+	}
+	return f.Message
+}
+
 func writeText(w io.Writer, r *Report) error {
 	for _, f := range r.Findings {
-		loc := f.File
-		if f.Line > 0 {
-			loc = fmt.Sprintf("%s:%d", f.File, f.Line)
-		}
-		if loc != "" {
-			loc += ": "
-		}
-		marker := ""
-		if f.Severity != Error {
-			marker = string(f.Severity) + ": "
-		}
-		if f.Severity == Note && f.File == "" {
-			fmt.Fprintf(w, "%s\n", f.Message)
-			continue
-		}
-		fmt.Fprintf(w, "%s%s%s: %s\n", loc, marker, f.RuleID, f.Message)
-		if f.Fix != "" {
-			fmt.Fprintf(w, "    fix: %s\n", f.Fix)
-		}
+		writeTextFinding(w, f)
 	}
 	for _, s := range r.Skipped {
 		fmt.Fprintf(w, "skipped: %s: %s\n", s.RuleID, s.Reason)
@@ -196,6 +189,29 @@ func writeText(w io.Writer, r *Report) error {
 		fmt.Fprintf(w, "pawl: %d checks, %d errors, %d warnings\n", len(r.Checked), errs, warns)
 	}
 	return nil
+}
+
+// writeTextFinding prints one finding; a note without a file is context for the reader and prints bare.
+func writeTextFinding(w io.Writer, f Finding) {
+	if f.Severity == Note && f.File == "" {
+		fmt.Fprintf(w, "%s\n", f.Message)
+		return
+	}
+	loc := f.File
+	if f.Line > 0 {
+		loc = fmt.Sprintf("%s:%d", f.File, f.Line)
+	}
+	if loc != "" {
+		loc += ": "
+	}
+	marker := ""
+	if f.Severity != Error {
+		marker = string(f.Severity) + ": "
+	}
+	fmt.Fprintf(w, "%s%s%s: %s\n", loc, marker, f.RuleID, f.Message)
+	if f.Fix != "" {
+		fmt.Fprintf(w, "    fix: %s\n", f.Fix)
+	}
 }
 
 func escapeGH(s string) string {
@@ -250,6 +266,19 @@ type sarifLocation struct {
 	} `json:"physicalLocation"`
 }
 
+// sarifLevel maps a severity to its SARIF level; a severity pawl does not know counts as an error.
+func sarifLevel(s Severity) string {
+	switch s {
+	case Error:
+		return "error"
+	case Warning:
+		return "warning"
+	case Note:
+		return "note"
+	}
+	return "error"
+}
+
 func writeSARIF(w io.Writer, r *Report) error {
 	rules := map[string]bool{}
 	run := sarifRun{Tool: sarifTool{Driver: sarifDriver{Name: r.Tool, Version: r.Version, InformationURI: "https://github.com/rojosinalma/pawl"}}}
@@ -258,17 +287,7 @@ func writeSARIF(w io.Writer, r *Report) error {
 			rules[f.RuleID] = true
 			run.Tool.Driver.Rules = append(run.Tool.Driver.Rules, sarifRule{ID: f.RuleID, ShortDescription: map[string]string{"text": f.RuleID}})
 		}
-		level := "error"
-		if f.Severity == Warning {
-			level = "warning"
-		} else if f.Severity == Note {
-			level = "note"
-		}
-		msg := f.Message
-		if f.Fix != "" {
-			msg += " Fix: " + f.Fix
-		}
-		res := sarifResult{RuleID: f.RuleID, Level: level, Message: map[string]any{"text": msg}}
+		res := sarifResult{RuleID: f.RuleID, Level: sarifLevel(f.Severity), Message: map[string]any{"text": messageWithFix(f)}}
 		if f.File != "" {
 			var loc sarifLocation
 			loc.PhysicalLocation.ArtifactLocation.URI = f.File

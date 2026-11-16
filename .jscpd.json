@@ -1,0 +1,18 @@
+{
+  "minLines": 8,
+  "minTokens": 60,
+  "ignore": [
+    "**/node_modules/**",
+    "**/vendor/**",
+    "**/dist/**",
+    "**/.pawl/**",
+    "**/.mise/**",
+    "**/*.md",
+    "**/*.lock",
+    "**/*.min.*",
+    "**/testdata/**",
+    "**/fixtures/**"
+  ],
+  "gitignore": true,
+  "absolute": false
+}

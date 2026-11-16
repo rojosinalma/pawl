@@ -1,0 +1,3 @@
+# ast-grep project configuration for the pawl rule pack. `ast-grep scan -c .pawl/sgconfig.yml`.
+ruleDirs:
+  - rules

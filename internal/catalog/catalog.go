@@ -18,6 +18,7 @@ var raw []byte
 // Class groups rules by what they protect.
 type Class string
 
+// The classes of the catalog, in the order `pawl rules` lists them.
 const (
 	Hygiene    Class = "hygiene"
 	Escape     Class = "escape"
@@ -32,6 +33,7 @@ const (
 // Ring names where an enforcement normally runs.
 type Ring string
 
+// The rings, from the fastest (the git hook) to the slowest (the scheduled run).
 const (
 	Precommit Ring = "precommit"
 	Check     Ring = "check"

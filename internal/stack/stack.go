@@ -153,28 +153,35 @@ func Match(path string, globs []string) bool {
 	path = filepath.ToSlash(path)
 	base := filepath.Base(path)
 	for _, g := range globs {
-		if strings.HasPrefix(g, "**/") {
-			rest := strings.TrimPrefix(g, "**/")
-			if !strings.Contains(rest, "/") {
-				if ok, _ := filepath.Match(rest, base); ok {
-					return true
-				}
-				continue
-			}
-			// a directory pattern such as **/test/**: match any path segment sequence
-			if matchSegments(path, rest) {
+		if rest, ok := strings.CutPrefix(g, "**/"); ok {
+			if matchAnyDepth(path, base, rest) {
 				return true
 			}
 			continue
 		}
-		if ok, _ := filepath.Match(g, path); ok {
-			return true
-		}
-		if strings.HasSuffix(g, "/**") && strings.HasPrefix(path, strings.TrimSuffix(g, "/**")+"/") {
+		if matchRooted(path, g) {
 			return true
 		}
 	}
 	return false
+}
+
+// matchAnyDepth matches the rest of a `**/` glob: a file pattern against the base name, a directory pattern such
+// as test/** against any path segment sequence.
+func matchAnyDepth(path, base, rest string) bool {
+	if !strings.Contains(rest, "/") {
+		ok, _ := filepath.Match(rest, base)
+		return ok
+	}
+	return matchSegments(path, rest)
+}
+
+// matchRooted matches a glob anchored at the root; a trailing /** covers everything below the directory.
+func matchRooted(path, glob string) bool {
+	if ok, _ := filepath.Match(glob, path); ok {
+		return true
+	}
+	return strings.HasSuffix(glob, "/**") && strings.HasPrefix(path, strings.TrimSuffix(glob, "/**")+"/")
 }
 
 func matchSegments(path, pattern string) bool {

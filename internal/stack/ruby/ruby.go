@@ -27,13 +27,18 @@ const (
 	SimplecovLcovVersion      = "0.9.0"
 )
 
+// Adapter is the stack.Adapter of this stack.
 type Adapter struct{}
 
 func init() { stack.Register(Adapter{}) }
 
-func (Adapter) Name() string  { return "ruby" }
+// Name implements stack.Adapter.
+func (Adapter) Name() string { return "ruby" }
+
+// Title implements stack.Adapter.
 func (Adapter) Title() string { return "Ruby" }
 
+// Detect implements stack.Adapter.
 func (Adapter) Detect(files []string) bool {
 	for _, f := range files {
 		if f == "Gemfile" || f == "Rakefile" || strings.HasSuffix(f, ".rb") || strings.HasSuffix(f, ".gemspec") {
@@ -43,6 +48,7 @@ func (Adapter) Detect(files []string) bool {
 	return false
 }
 
+// Facts implements stack.Adapter.
 func (Adapter) Facts(root string) map[string]string {
 	facts := map[string]string{"test_framework": "minitest"}
 	if _, err := os.Stat(filepath.Join(root, "spec")); err == nil {
@@ -56,6 +62,7 @@ func (Adapter) Facts(root string) map[string]string {
 	return facts
 }
 
+// Tools implements stack.Adapter.
 func (Adapter) Tools() []stack.Tool {
 	return []stack.Tool{
 		{Name: "ruby", Check: []string{"ruby", "--version"}, Install: "the version in .ruby-version; mise use ruby", Rings: []string{"precommit", "check"}},
@@ -65,17 +72,22 @@ func (Adapter) Tools() []stack.Tool {
 	}
 }
 
+// SourceGlobs implements stack.Adapter.
 func (Adapter) SourceGlobs() []string {
 	return []string{"**/*.rb", "**/*.rake", "Gemfile", "Rakefile", "**/*.gemspec"}
 }
+
+// TestGlobs implements stack.Adapter.
 func (Adapter) TestGlobs() []string {
 	return []string{"**/*_test.rb", "**/*_spec.rb", "test/**", "spec/**"}
 }
 
+// Pins implements stack.Adapter.
 func (Adapter) Pins() []stack.Pin {
 	return []stack.Pin{{What: "Ruby version (.ruby-version or the Gemfile ruby directive)", Files: []string{".ruby-version", ".tool-versions", "mise.toml"}, Locks: []string{"Gemfile.lock"}}}
 }
 
+// Suppressions implements stack.Adapter.
 func (Adapter) Suppressions() []stack.Suppression {
 	globs := []string{"**/*.rb", "**/*.rake", "Gemfile", "Rakefile"}
 	return []stack.Suppression{
@@ -84,6 +96,7 @@ func (Adapter) Suppressions() []stack.Suppression {
 	}
 }
 
+// Configs implements stack.Adapter.
 func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	framework := p.Facts["test_framework"]
 	plugin, testCops := "rubocop-minitest", minitestCops
@@ -128,6 +141,7 @@ func GemfileAdditions(framework string) string {
 	return b.String()
 }
 
+// Rules implements stack.Adapter.
 func (Adapter) Rules(p stack.Params) map[string]stack.Enforcement {
 	lint := func(via ...string) stack.Enforcement { return stack.Enforcement{Step: "lint", Via: via} }
 	sg := common.RuleIDs("ruby")
@@ -163,6 +177,7 @@ func (Adapter) Rules(p stack.Params) map[string]stack.Enforcement {
 	}
 }
 
+// Verifiers implements stack.Adapter.
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 	f, y := rubocopFile, stack.YAML
 	cop := func(rule, name string) stack.Verifier { return stack.V(rule, "rubocop/"+name, copOn(name)) }
@@ -236,6 +251,7 @@ func copSetting(name, key string, want any) func(stack.Verify) []report.Finding 
 	}
 }
 
+// Make implements stack.Adapter.
 func (Adapter) Make(p stack.Params) stack.Make {
 	test := `bundle exec ruby -Ilib:test -e 'ARGV.each { |f| require File.expand_path(f) }' $(RUBY_TEST_SCOPE)`
 	scope := "RUBY_TEST_SCOPE ?= $(shell $(PAWL) affected ruby 2>/dev/null || find test -name '*_test.rb')"

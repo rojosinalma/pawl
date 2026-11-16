@@ -154,27 +154,34 @@ func TestEveryStackWorkflows(t *testing.T) {
 	if strings.Join(res.Stacks, ",") != "go,typescript,ruby,python,shell,rust" {
 		t.Fatalf("stacks = %v", res.Stacks)
 	}
-	out := os.Getenv("PAWL_WORKFLOW_OUT")
 	for _, name := range workflowFiles {
-		content := readFile(t, dir, ".github/workflows/"+name)
-		checkWorkflow(t, name, content)
-		if out == "" {
-			continue
-		}
-		if err := writeFile(filepath.Join(out, ".github/workflows", name), content, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		checkWorkflow(t, name, readFile(t, dir, ".github/workflows/"+name))
 	}
-	if out != "" {
-		for _, f := range []string{hookPath, agentsFile, "mise.toml"} {
-			if err := writeFile(filepath.Join(out, f), readFile(t, dir, f), 0o755); err != nil {
-				t.Fatal(err)
-			}
-		}
+	if out := os.Getenv("PAWL_WORKFLOW_OUT"); out != "" {
+		copyWorkflowFiles(t, dir, out)
 	}
 	check := readFile(t, dir, ".github/workflows/check.yml")
 	for name := range actions {
 		assertContains(t, "check.yml", check, name+"@"+actions[name].SHA+" # "+actions[name].Tag)
+	}
+}
+
+// copyWorkflowFiles copies the rendered workflows, and the files they reference, from dir to out.
+func copyWorkflowFiles(t *testing.T, dir, out string) {
+	t.Helper()
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range workflowFiles {
+		rel := filepath.Join(".github/workflows", name)
+		if err := writeFile(out, rel, readFile(t, dir, rel), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{hookPath, agentsFile, "mise.toml"} {
+		if err := writeFile(out, f, readFile(t, dir, f), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

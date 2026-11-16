@@ -1,0 +1,8 @@
+# typos: identifier and comment spell check. Add project words under [default.extend-words].
+[files]
+extend-exclude = ["*.lock", "*.min.*", "vendor/", "node_modules/", ".pawl/reports/", "testdata/", "fixtures/"]
+
+[default]
+extend-ignore-re = ["[0-9a-f]{7,40}"]
+
+[default.extend-words]
