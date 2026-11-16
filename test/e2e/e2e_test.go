@@ -9,6 +9,8 @@
 //     with PAWL_E2E_CHECK=1, `pawl baseline` and `pawl verify` must exit 0 too.
 //   - fail: `make lint` must exit non-zero and its output must contain every line of
 //     test/fixtures/<stack>/fail.expect (when present), so the fixture fails for the reasons it was written for.
+//
+// TestMakeWorksWithoutPawl runs the Go pass fixture's targets with PAWL pointing nowhere: pawl is optional for make.
 package e2e
 
 import (
@@ -29,13 +31,19 @@ func pawlBin() string {
 
 func run(t *testing.T, dir string, name string, args ...string) (string, error) {
 	t.Helper()
+	return runEnv(t, dir, nil, name, args...)
+}
+
+// runEnv is run with extra environment variables, which override the defaults.
+func runEnv(t *testing.T, dir string, env []string, name string, args ...string) (string, error) {
+	t.Helper()
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"PAWL="+pawlBin(), "PAWL_FULL=1",
+	cmd.Env = append(append(os.Environ(),
+		"PAWL="+pawlBin(), "PAWL_FULL=1", "PAWL_REQUIRED=",
 		"GIT_AUTHOR_NAME=fixture", "GIT_AUTHOR_EMAIL=fixture@example.com",
 		"GIT_COMMITTER_NAME=fixture", "GIT_COMMITTER_EMAIL=fixture@example.com",
-	)
+	), env...)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
@@ -108,5 +116,34 @@ func TestFixtures(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestMakeWorksWithoutPawl prepares the Go pass fixture with the real pawl, then runs the rings with PAWL pointing
+// nowhere: each target passes and names what it skipped, and PAWL_REQUIRED=1 turns the missing pawl into a failure.
+func TestMakeWorksWithoutPawl(t *testing.T) {
+	dir := prepare(t, "../fixtures/go/pass")
+	setup, err := os.ReadFile("../fixtures/go/setup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(t, dir, "sh", "-ec", string(setup))
+	must(t, dir, "make", "lint")
+	must(t, dir, "git", "add", "-A")
+	must(t, dir, pawlBin(), "baseline")
+	missing := []string{"PAWL=/nonexistent/pawl"}
+	for target, warning := range map[string]string{
+		"check":     "make check: warning: pawl is not installed; skipped: pawl verify",
+		"precommit": "make precommit: warning: pawl is not installed; skipped: pawl verify --ring precommit",
+		"test":      "make test: warning: pawl is not installed; every test runs",
+	} {
+		out, err := runEnv(t, dir, missing, "make", target)
+		if err != nil || !strings.Contains(out, warning+"\n") {
+			t.Errorf("make %s without pawl: %v\n%s", target, err, out)
+		}
+	}
+	out, err := runEnv(t, dir, append(missing, "PAWL_REQUIRED=1"), "make", "check")
+	if err == nil || !strings.Contains(out, "pawl is not installed and PAWL_REQUIRED=1") {
+		t.Errorf("make check without pawl and PAWL_REQUIRED=1 must fail: %v\n%s", err, out)
 	}
 }

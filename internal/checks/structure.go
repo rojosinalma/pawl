@@ -16,7 +16,7 @@ var (
 	pawlVerifyRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+verify\b|\$\(call\s+pawl_run,\s*verify\b`)
 	// pawlBareRe finds a pawl command a recipe runs without the guard macro; group 3 is the command and its arguments.
 	pawlBareRe = regexp.MustCompile(`(^|[\s;&|(@-])(\$\(PAWL\)|\$\{PAWL\}|pawl)\s+((verify|budget|record|baseline|affected|run)\b.*)$`)
-	// pawlOldCheckRe finds the v0.1 call `pawl check`, which named the verification and now names the gate.
+	// pawlOldCheckRe finds the v0.1 call `pawl check`, which named the verification and was removed since.
 	pawlOldCheckRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+check\b`)
 	// pawlAffectedRe finds `pawl affected` in a recipe or a variable the recipe expands.
 	pawlAffectedRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+affected\b`)

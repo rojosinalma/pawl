@@ -122,7 +122,7 @@ rules:
     ring: check
     generic: true
     title: "The standard make targets exist"
-    statement: "`make check`, `make fmt`, `make lint`, `make test` and `make precommit` exist; `make check` runs `pawl verify`."
+    statement: "`make check`, `make fmt`, `make lint`, `make test` and `make precommit` exist; `make check` runs `pawl verify`, through the guard that skips it when Pawl is not installed."
 
   - id: repo.ci-shape
     class: repo

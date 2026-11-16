@@ -129,7 +129,8 @@ nightly ring runs. A test that fails is never retried; `pawl` has no retry anywh
 
 `pawl affected` prints the test scope for the change against `base`: exact for Go (`go list -deps`) and Rust (`cargo
 metadata`), per changed file for the others, everything when a configuration, lockfile or workflow changed, or when
-`PAWL_FULL=1`. The Makefile uses it: `TEST_SCOPE ?= $(shell pawl affected go)`.
+`PAWL_FULL=1`. The Makefile uses it, with the stack's full scope when pawl is missing or fails:
+`GO_TEST_SCOPE ?= $(shell $(PAWL) affected go 2>/dev/null || echo ./...)`.
 
 ## Commands
 
@@ -138,7 +139,6 @@ metadata`), per changed file for the others, everything when a configuration, lo
 | `pawl init` | detect stacks; write `pawl.toml`, the tool configurations that are missing, the make targets that are missing, `.githooks/pre-commit`, `.pawl/` (ast-grep pack, baseline), the workflows, the `AGENTS.md` block, `.gitignore` lines; print the waived rules to decide on |
 | `pawl install` | install mise when the machine lacks it (pinned version, checksum verified), the tools pinned in `mise.toml`, and each stack's packages through its own package manager; then the `pawl doctor` report; `--no-mise` skips mise |
 | `pawl run <target>` | run `make <target>` with the pinned tools on PATH: one line when it passes, the failing steps when it does not; a ring (`precommit`, `check`, `nightly`) also gets its wall time recorded; runs in the toolbox image when `git config pawl.toolbox` names one; `--verbose`, `--no-toolbox` |
-| `pawl check` | the merge gate: exactly `pawl run check`. Called from a make recipe (a v0.1 Makefile's `check` target) it runs `pawl verify` instead and names the recipe to fix, so it never starts make again |
 | `pawl verify` | the catalog verification: manifest, targets, verifiers, text checks, ratchet; `--ring precommit` limits it to the fast checks on staged files; `--format text\|json\|sarif\|github` |
 | `pawl doctor` | every tool pinned and present at the pinned version; hook installed; `make` targets exist; `gh` present |
 | `pawl status` | the state of the current branch's pull request: failing check, the first file and line, the command that fixes it |
@@ -218,11 +218,15 @@ manifest.
     `core.hooksPath` stays. What the existing configuration does not enforce shows up in `pawl verify`.
 13. This repository's own dependencies are kept current by Dependabot (Go modules, actions, the toolbox base images).
     Dependabot does not read `mise.toml`; those pins are bumped by hand and re-locked.
-14. make stays the contract: CI, the generated workflows and the Makefile recipes call make, and every ring works
-    with mise and make alone. pawl is a front end over it that adds quiet output, the toolbox fallback and timing.
-    `pawl check` is the gate through `pawl run check`; `pawl verify` is the catalog verification that `make check`
-    ends with. In v0.1 `pawl check` named the verification; called from a make recipe of a Makefile whose
-    `check` target still says `pawl check`, it runs the verification with a note, so that Makefile does not loop.
+14. make is the contract, and it works alone: CI, the generated workflows and the Makefile recipes call make, and
+    every target runs with mise and make, without pawl installed. pawl is a front end over it that adds quiet
+    output, the toolbox fallback and timing; `pawl run check` is the gate through it, and `pawl verify` is the
+    catalog verification that `make check` ends with. Every pawl call in a generated recipe goes through the
+    `pawl_run` macro, which tests for pawl when the recipe runs (a project may build pawl as a prerequisite): without
+    pawl the call is skipped with one warning line, and the test scopes fall back to every test. `PAWL_REQUIRED=1`,
+    set by the generated CI workflows, makes a missing pawl an error instead. The hook runs `make precommit` itself
+    when pawl is missing. `pawl check`, which named the verification in v0.1 and the gate later, was removed; it
+    only names the two commands that replace it.
 15. `pawl install` wraps mise and the stacks' package managers rather than installing tools itself. On a machine
     without mise it downloads a pinned mise release and verifies its checksum before it runs it.
 16. `drift.pr-size` is skipped on the base branch (`main` for `origin/main`): commits there are not a pull request.

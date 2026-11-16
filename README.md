@@ -54,7 +54,7 @@ pawl init        # detect the stacks; write pawl.toml, missing tool configs, mak
 pawl install     # mise when the machine lacks it, the pinned tools, each stack's packages; then `pawl doctor`
 pawl run lint    # the first run shows what the code owes; fix what you want to fix now
 pawl baseline    # record the rest (suppressions, duplicated blocks, oversized files): from here it only shrinks
-pawl check       # the merge gate, quietly: one line when it passes, only the failing steps when it does not
+pawl run check   # the merge gate, quietly: one line when it passes, only the failing steps when it does not
 ```
 
 The same with `mise` and `make`, which is what CI runs:
@@ -66,12 +66,14 @@ make check       # the merge gate: lint, tests, `pawl verify`
 
 `make` is the real contract; Pawl is a frontend over it for ease of use.
 
+Every `make` target works without Pawl installed. The calls to `pawl` are skipped with a warning, and `make test`
+runs every test. `PAWL_REQUIRED=1`, which the generated CI workflows set, turns a missing Pawl into an error.
+
 `pawl run <target>` runs any `make` target (`lint`, `fmt`, `test`, a single `lint-<tool>`) with the pinned tools on
 PATH, so a shell without mise activated still works.
 
-`pawl check` is a shorthand for `pawl run check`: it runs `make check` with the pinned tools on PATH,
-prints only what failed, records the ring's time, and runs the ring in the toolbox image when
-the clone names one.
+`pawl run check` runs `make check` with the pinned tools on PATH, prints only what failed, records the ring's time,
+and runs the ring in the toolbox image when the clone names one.
 
 The generated `mise.toml` pins the tools without a native pin file; the runtime of each stack stays where the
 stack keeps it (`go.mod`, `.ruby-version`, `.python-version`, `rust-toolchain.toml`).
@@ -84,7 +86,7 @@ Day to day:
 | Command | Purpose |
 |---|---|
 | `pawl install` | mise when it is missing, the tools pinned in `mise.toml`, each stack's packages; then `pawl doctor` |
-| `pawl check` | Shorthand for `make check` through `pawl run`: quiet output, the pinned tools on PATH, the toolbox fallback, timing |
+| `pawl run check` | `make check` through Pawl: quiet output, the pinned tools on PATH, the toolbox fallback, timing |
 | `pawl run <target>` | a `make` target through Pawl: a complete ring check (`precommit`, `check`, `nightly`) or any other task (`lint`, `fmt`, `test`); `--verbose` streams `make` output, `--no-toolbox` stays local |
 | `pawl verify` | the Pawl catalog verification alone (manifest, targets, tool configurations, text checks, ratchet); `make check` ends with it |
 | `pawl status` | why the pull request of this branch fails: the check, the first file and line, the fix |
