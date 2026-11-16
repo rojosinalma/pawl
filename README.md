@@ -1,14 +1,14 @@
-# pawl
+# Pawl
 
 ### What is Pawl?
 
-Pawl is a multi-stack tool for code quality and structure through configurable abstract rules that are enforced through tooling and automation native to the corresponding [stacks]( https://github.com/rojosinalma/pawl/blob/main/README.md#stacks).
+Pawl is a multi-stack tool for code quality and structure through configurable abstract rules that are enforced through tooling and automation native to the corresponding [stacks](#stacks).
 
-It uses `Mise` to keep tooling updated and `Make` to wrap tool calls and workflow control, so you can completely dispose of Pawl and continue working without it, but maintaining stacks with Prawl gives you a central place to control your tooling and rules without worrying about updating every single repo every time a new update comes or if you want to apply the same set of rules across multiple projects.
+It uses `mise` to keep tooling updated and `make` to wrap tool calls and workflow control, so you can completely dispose of Pawl and continue working without it, but maintaining stacks with Pawl gives you a central place to control your tooling and rules without worrying about updating every single repo every time a new update comes or if you want to apply the same set of rules across multiple projects.
 
 ### Why?
 
-Agents and AI Models take Skills and rules as suggestions if these are not enforced (kinda like humans), so Prawl was born to stop wasting tokens that need to load at every session turn and have quality gates that won't let agents run wild or circumvent what was told to them in prose.
+Agents and AI Models take Skills and rules as suggestions if these are not enforced (kinda like humans), so Pawl was born to stop wasting tokens that need to load at every session turn and have quality gates that won't let agents run wild or circumvent what was told to them in prose.
 
 There is an extent that can't be covered by tooling, this should be added to Skills or simple instructions. These are mostly good practices and conventions that need some reasoning evaluator (human or agent), but everything that can be checked and enforced through tooling should be done as such.
 
@@ -16,7 +16,7 @@ There is an extent that can't be covered by tooling, this should be added to Ski
 
 A pawl is the small catch or gear that lets a ratchet wrench turn only one way.
 
-`pawl` makes a repository's own tooling enforce a catalog of quality rules, and have them only move one way, the positive way.
+Pawl makes a repository's own tooling enforce a catalog of quality rules, and have them only move one way, the positive way.
 
 ## What it does
 
@@ -29,7 +29,7 @@ A pawl is the small catch or gear that lets a ratchet wrench turn only one way.
 4. **A ratchet**: suppressions, oversized files, duplicated blocks and open TODOs are counted in a baseline that may
    only shrink.
 5. **make as the entry point**: `make check`, `make fmt`, `make lint`, `make test`, `make precommit`. The targets
-   belong to the project; pawl writes the ones that are missing and verifies the rest.
+   belong to the project; Pawl writes the ones that are missing and verifies the rest.
 6. **Three rings with time budgets**: the git hook (staged files, seconds), the pull request (the affected scope,
    minutes), nightly (everything slow).
 7. **A short checklist for what no tool reaches**, generated into `AGENTS.md` from the waived rules.
@@ -46,7 +46,7 @@ Binaries for Linux and macOS are on the [releases page](https://github.com/rojos
 
 ## Use
 
-With pawl:
+With Pawl:
 
 ```sh
 cd your-project
@@ -61,13 +61,13 @@ The same with mise and make, which is what CI runs:
 
 ```sh
 mise install     # the pinned tools of the rings (or install them your own way; `pawl doctor` verifies)
-make check       # the merge gate: lint, tests, pawl verify
+make check       # the merge gate: lint, tests, `pawl verify`
 ```
 
 `pawl run <target>` runs any make target (`lint`, `fmt`, `test`, a single `lint-<tool>`) with the pinned tools on
 PATH, so a shell without mise activated still works.
 
-make is the contract; pawl is a front end over it. `pawl check` is `pawl run check`: it runs `make check` with the
+make is the contract; Pawl is a front end over it. `pawl check` is `pawl run check`: it runs `make check` with the
 pinned tools on PATH, prints only what failed, records the ring's time, and runs the ring in the toolbox image when
 the clone names one.
 
@@ -83,7 +83,7 @@ Day to day:
 |---|---|
 | `make check` | lint, the affected tests, and the catalog verification; the same command CI runs |
 | `pawl check` | `make check` through `pawl run`: quiet output, the pinned tools on PATH, the toolbox fallback, timing |
-| `pawl run <target>` | a make target through pawl: a ring (`precommit`, `check`, `nightly`) or any other (`lint`, `fmt`, `test`); `--verbose` streams make's output, `--no-toolbox` stays on this machine |
+| `pawl run <target>` | a make target through Pawl: a ring (`precommit`, `check`, `nightly`) or any other (`lint`, `fmt`, `test`); `--verbose` streams make's output, `--no-toolbox` stays on this machine |
 | `pawl verify` | the catalog verification alone (manifest, targets, tool configurations, text checks, ratchet); `make check` ends with it |
 | `pawl install` | mise when it is missing, the tools pinned in `mise.toml`, each stack's packages; then `pawl doctor` |
 | `make fmt`, `pawl run fmt` | rewrite files with the stack's formatters |
@@ -124,7 +124,7 @@ tests without a reason, test-only branches), jscpd (duplication), typos, gitleak
 
 ## The toolbox image
 
-`ghcr.io/rojosinalma/pawl-toolbox` holds pawl and every tool the adapters name, at pinned versions, for CI and for
+`ghcr.io/rojosinalma/pawl-toolbox` holds Pawl and every tool the adapters name, at pinned versions, for CI and for
 machines without the tools:
 
 ```sh
@@ -146,7 +146,7 @@ behind them.
 ## Development
 
 ```sh
-make check       # pawl against its own catalog
+make check       # Pawl against its own catalog
 make test        # unit tests
 make toolbox     # build the toolbox image locally
 make e2e         # every stack's fixtures with the real tools, inside the toolbox
