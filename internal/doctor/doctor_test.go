@@ -16,6 +16,7 @@ import (
 	"github.com/rojosinalma/pawl/internal/report"
 	"github.com/rojosinalma/pawl/internal/runner"
 	"github.com/rojosinalma/pawl/internal/stack"
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
 
 type reply struct {
@@ -171,16 +172,6 @@ func TestDoctorBound(t *testing.T) {
 	}
 }
 
-func git(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v: %s", args, err, out)
-	}
-}
-
 func hookMessages(p *project.Project) string {
 	var out []string
 	for _, f := range hookFindings(p) {
@@ -191,12 +182,12 @@ func hookMessages(p *project.Project) string {
 
 func TestHook(t *testing.T) {
 	root := t.TempDir()
-	git(t, root, "init", "-q")
+	testrepo.Git(t, root, "init", "-q")
 	p := &project.Project{Root: root, Repo: &gitx.Repo{Root: root}}
 	if got := hookMessages(p); got != "core.hooksPath is unset, not .githooks | git config core.hooksPath .githooks\nthe pre-commit hook is missing | pawl init" {
 		t.Fatalf("fresh repo:\n%s", got)
 	}
-	git(t, root, "config", "core.hooksPath", ".githooks")
+	testrepo.Git(t, root, "config", "core.hooksPath", ".githooks")
 	hook := filepath.Join(root, ".githooks", "pre-commit")
 	if err := os.MkdirAll(filepath.Dir(hook), 0o755); err != nil {
 		t.Fatal(err)
@@ -213,11 +204,11 @@ func TestHook(t *testing.T) {
 	if got := hookMessages(p); got != "" {
 		t.Fatalf("healthy:\n%s", got)
 	}
-	git(t, root, "config", "core.hooksPath", filepath.Join(root, ".githooks"))
+	testrepo.Git(t, root, "config", "core.hooksPath", filepath.Join(root, ".githooks"))
 	if got := hookMessages(p); got != "" {
 		t.Fatalf("absolute path:\n%s", got)
 	}
-	git(t, root, "config", "core.hooksPath", ".husky")
+	testrepo.Git(t, root, "config", "core.hooksPath", ".husky")
 	if got := hookMessages(p); !strings.HasPrefix(got, "core.hooksPath is .husky") {
 		t.Fatalf("other path:\n%s", got)
 	}
@@ -225,7 +216,7 @@ func TestHook(t *testing.T) {
 
 func TestRunRealExec(t *testing.T) {
 	root := t.TempDir()
-	git(t, root, "init", "-q")
+	testrepo.Git(t, root, "init", "-q")
 	p := &project.Project{Root: root, Repo: &gitx.Repo{Root: root}}
 	r, err := Run(p)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rojosinalma/pawl/internal/testrepo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,13 +25,7 @@ func newProject(t *testing.T, git bool, files map[string]string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "demo")
 	for rel, content := range files {
-		path := filepath.Join(dir, rel)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		testrepo.Write(t, dir, rel, content)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

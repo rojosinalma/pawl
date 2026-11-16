@@ -3,43 +3,20 @@ package cli
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
-
-func write(t *testing.T, root, rel, content string) {
-	t.Helper()
-	path := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func git(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-}
 
 // goRepo is a small Go repository with one commit on main.
 func goRepo(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	write(t, root, "go.mod", "module example.com/app\n\ngo 1.25\n")
-	write(t, root, "main.go", "package main\n\nfunc main() {}\n")
-	git(t, root, "init", "-q", "-b", "main")
-	git(t, root, "add", "-A")
-	git(t, root, "commit", "-q", "-m", "first")
-	return root
+	return testrepo.New(t, map[string]string{
+		"go.mod":  "module example.com/app\n\ngo 1.25\n",
+		"main.go": "package main\n\nfunc main() {}\n",
+	})
 }
 
 func pawl(t *testing.T, root string, args ...string) (stdout, stderr string, code int) {
@@ -99,8 +76,8 @@ func TestRulesListsShowsAndSyncs(t *testing.T) {
 
 func TestBaselineThenCheckPassOnAFreshInit(t *testing.T) {
 	root := initRepo(t)
-	git(t, root, "add", "-A")
-	git(t, root, "commit", "-q", "--no-verify", "-m", "pawl init")
+	testrepo.Git(t, root, "add", "-A")
+	testrepo.Git(t, root, "commit", "-q", "--no-verify", "-m", "pawl init")
 	out, stderr, code := pawl(t, root, "baseline")
 	if code != 0 || !strings.Contains(out, "wrote .pawl/baseline.json") {
 		t.Fatalf("baseline (%d): %s%s", code, out, stderr)
@@ -152,7 +129,7 @@ func TestBaselineOnlyShrinksWithoutAReason(t *testing.T) {
 		t.Fatal(stderr)
 	}
 	suppressed := "package main\n\nfunc main() {} //" + "nolint:unused // kept for the example\n"
-	write(t, root, "main.go", suppressed)
+	testrepo.Write(t, root, "main.go", suppressed)
 	_, stderr, code := pawl(t, root, "baseline")
 	if code != 1 || !strings.Contains(stderr, "escape.suppressions rose from 0 to 1") || !strings.Contains(stderr, "--grow") {
 		t.Fatalf("baseline with a regression: %d %q", code, stderr)

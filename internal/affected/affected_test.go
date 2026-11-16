@@ -2,7 +2,6 @@ package affected
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/rojosinalma/pawl/internal/runner"
 	"github.com/rojosinalma/pawl/internal/runner/runnertest"
 	"github.com/rojosinalma/pawl/internal/stack"
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
 
 func fakeProject(root string, files ...string) *project.Project {
@@ -182,37 +182,15 @@ func TestScopeWithoutRepo(t *testing.T) {
 	}
 }
 
-func git(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v: %s", args, err, out)
-	}
-}
-
-func write(t *testing.T, root, rel, content string) {
-	t.Helper()
-	full := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func repoProject(t *testing.T) *project.Project {
 	t.Helper()
-	root := t.TempDir()
-	git(t, root, "init", "-q", "-b", "main")
-	write(t, root, "pkg/foo.py", "x = 1\n")
-	write(t, root, "pkg/old.py", "y = 1\n")
-	write(t, root, "tests/test_foo.py", "def test_x(): pass\n")
-	write(t, root, "tests/test_new.py", "def test_y(): pass\n")
-	git(t, root, "add", "pkg", "tests/test_foo.py")
-	git(t, root, "commit", "-q", "-m", "init")
+	root := testrepo.New(t, map[string]string{
+		"pkg/foo.py":        "x = 1\n",
+		"pkg/old.py":        "y = 1\n",
+		"tests/test_foo.py": "def test_x(): pass\n",
+	})
+	// Untracked: written after the commit.
+	testrepo.Write(t, root, "tests/test_new.py", "def test_y(): pass\n")
 	p := fakeProject(root, "pkg/foo.py", "tests/test_foo.py", "tests/test_new.py")
 	p.Repo = &gitx.Repo{Root: root}
 	p.Manifest.Base = "main"
@@ -226,7 +204,7 @@ func TestScopeInRepo(t *testing.T) {
 	if err != nil || got != "tests/test_new.py" {
 		t.Fatalf("untracked test: %q, %v", got, err)
 	}
-	write(t, p.Root, "pkg/foo.py", "x = 2\n")
+	testrepo.Write(t, p.Root, "pkg/foo.py", "x = 2\n")
 	if err := os.Remove(filepath.Join(p.Root, "pkg/old.py")); err != nil {
 		t.Fatal(err)
 	}
