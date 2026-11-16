@@ -8,7 +8,7 @@ It uses `Mise` to keep tooling updated and `Make` to wrap tool calls and workflo
 
 ### Why?
 
-Agents and AI Models take Skills and Rules that come in prose as suggestions if these are not hard-blocking them through tooling, so Prawl was born out of the need to stop wasting tokens you need to load at every turn and have quality gates that won't let code get to your releases if they don't meet your quality needs.
+Agents and AI Models take Skills and rules as suggestions if these are not enforced (kinda like humans), so Prawl was born to stop wasting tokens that need to load at every session turn and have quality gates that won't let agents run wild or circumvent what was told to them in prose.
 
 ### What is a _real_ Pawl?
 
