@@ -116,6 +116,16 @@ func TestDoctorMissingAndMismatch(t *testing.T) {
 	}
 }
 
+func TestDoctorMissingMakeFix(t *testing.T) {
+	replies := baseReplies()
+	delete(replies, "make --version")
+	r, _ := run(&project.Project{Root: t.TempDir()}, &fakeRunner{replies: replies}, false, "")
+	if len(r.Findings) != 1 || r.Findings[0].Message != "make is not installed (rings: all)" ||
+		r.Findings[0].Fix != "`pawl install` installs it (through mise)" || !r.Failed() {
+		t.Fatalf("findings %+v", r.Findings)
+	}
+}
+
 func TestDoctorHealthyVerbose(t *testing.T) {
 	p := newProject(t)
 	replies := baseReplies()

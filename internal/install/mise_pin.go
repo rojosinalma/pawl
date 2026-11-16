@@ -15,6 +15,13 @@ const (
 	miseSHA256MacosArm64 = "e4509f159e0492e89065edcf52f2918e2751e3574620586058468ba0563aed59"
 )
 
+// MakeVersion is the GNU make pawl installs through mise when the machine has none. mise's registry maps `make` to
+// the conda backend (conda-forge builds), which verifies the package it downloads; pawl pins only the version.
+//
+// To bump: pick a version listed by `mise ls-remote make` (the make package of conda-forge), set it here and check
+// that `mise install make@<version>` gives a `bin/make` that runs on a clean Linux and macOS.
+const MakeVersion = "4.4.1"
+
 // pinnedSHA256 returns the sums of the pinned release by platform ("linux-x64").
 func pinnedSHA256() map[string]string {
 	return map[string]string{

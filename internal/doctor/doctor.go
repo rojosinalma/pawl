@@ -82,7 +82,7 @@ func run(p *project.Project, r runner.Runner, verbose bool, mise string) (*repor
 // items lists make, git and gh, then every adapter's tools in adapter order, each tool once.
 func items(p *project.Project) []item {
 	out := []item{
-		{tool: stack.Tool{Name: "make", Check: []string{"make", "--version"}, Install: "install GNU make with the system package manager"}, required: true},
+		{tool: stack.Tool{Name: "make", Check: []string{"make", "--version"}, Install: "`pawl install` installs it (through mise)"}, required: true},
 		{tool: stack.Tool{Name: "git", Check: []string{"git", "--version"}, Install: "install git with the system package manager"}, required: true},
 		{tool: stack.Tool{Name: "gh", Check: []string{"gh", "--version"}, Install: "https://cli.github.com"},
 			missing: "gh is not installed: `pawl status` and the CI ring budgets need it"},

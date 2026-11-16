@@ -20,6 +20,7 @@ import (
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/rings"
 	"github.com/rojosinalma/pawl/internal/runner"
+	"github.com/rojosinalma/pawl/internal/toolenv"
 )
 
 const (
@@ -66,7 +67,16 @@ type executor interface {
 type osExecutor struct{}
 
 func (osExecutor) run(ctx context.Context, c command) (int, error) {
-	cmd := exec.CommandContext(ctx, c.name, c.args...)
+	name := c.name
+	if c.env != nil {
+		// exec.Command searches the PATH of this process; the program must come from the PATH make runs with
+		path, err := toolenv.LookPath(c.env, c.name)
+		if err != nil {
+			return -1, fmt.Errorf("run %s: %w", c.name, err)
+		}
+		name = path
+	}
+	cmd := exec.CommandContext(ctx, name, c.args...)
 	cmd.Dir = c.dir
 	cmd.Env = c.env
 	cmd.Stdout = c.stdout
