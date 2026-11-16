@@ -136,14 +136,14 @@ metadata`), per changed file for the others, everything when a configuration, lo
 
 | Command | Does |
 |---|---|
-| `pawl init` | detect stacks; write `pawl.toml`, the tool configurations that are missing, the make targets that are missing, `.githooks/pre-commit`, `.pawl/` (ast-grep pack, baseline), the workflows, the `AGENTS.md` block, `.gitignore` lines; print the waived rules to decide on |
+| `pawl init` | detect stacks; write `pawl.toml`, the tool configurations that are missing, the make targets that are missing, `.githooks/pre-commit`, `.pawl/` (ast-grep pack, baseline, `generated.json`), the workflows, the `AGENTS.md` block, `.gitignore` lines; print the waived rules to decide on |
 | `pawl install` | install mise when the machine lacks it (pinned version, checksum verified), make when the machine lacks it (pinned version, through mise, linked into `~/.local/bin`), the tools pinned in `mise.toml`, and each stack's packages through its own package manager; then the `pawl doctor` report; `--no-mise` and `--no-make` skip the first two |
 | `pawl run <target>` | run `make <target>` with the pinned tools on PATH: one line when it passes, the failing steps when it does not; a ring (`precommit`, `check`, `nightly`) also gets its wall time recorded; runs in the toolbox image when `git config pawl.toolbox` names one; `--verbose`, `--no-toolbox` |
 | `pawl verify` | the catalog verification: manifest, targets, verifiers, text checks, ratchet; `--ring precommit` limits it to the fast checks on staged files; `--format text\|json\|sarif\|github` |
 | `pawl doctor` | every tool pinned and present at the pinned version; hook installed; `make` targets exist; `gh` present |
 | `pawl status` | the state of the current branch's pull request: failing check, the first file and line, the command that fixes it |
 | `pawl baseline` | record the current ratchet values (shrink); `--grow "reason"` to raise |
-| `pawl rules` | the catalog with each rule's status here; `pawl rules show <id>`; `pawl rules sync` refreshes the ast-grep pack and the `AGENTS.md` block (rules only: tool versions are mise's, and the tool configurations stay as `pawl init` wrote them) |
+| `pawl rules` | the catalog with each rule's status here; `pawl rules show <id>`; `pawl rules sync` brings every rule file Pawl wrote (the tool configurations and the ast-grep pack) up to date where nobody edited it, lists the edited ones, and refreshes the `AGENTS.md` block; `--force <path>` takes Pawl's version of an edited file, `--dry-run` writes nothing (rules only: tool versions are mise's) |
 | `pawl affected` | the test scope of the change |
 | `pawl budget` | the ring medians against their budgets |
 | `pawl record` | stores a ring's wall time (hidden; for hooks of one's own) |
@@ -185,8 +185,9 @@ manifest.
 |---|---|---|
 | `pawl.toml` | project | the manifest |
 | `Makefile` | project | the five targets plus `fmt-check`, `coverage`; existing targets are never touched |
-| tool configurations (`.golangci.yml`, `biome.jsonc`, `.rubocop.yml`, `ruff.toml`, `pyrightconfig.json`, `.shellcheckrc`, `.editorconfig`, `.hadolint.yaml`, `.github/actionlint.yaml`, `.github/zizmor.yml`, `clippy.toml`, `.gitleaks.toml`, `.jscpd.json`, `.typos.toml`) | project | written only when missing |
-| `.pawl/sgconfig.yml`, `.pawl/rules/*.yml` | pawl, refreshed by `pawl rules sync` when unedited | the ast-grep pack, templated with `config_module` and `own_module` |
+| tool configurations (`.golangci.yml`, `biome.jsonc`, `.rubocop.yml`, `ruff.toml`, `pyrightconfig.json`, `.shellcheckrc`, `.editorconfig`, `.hadolint.yaml`, `.github/actionlint.yaml`, `.github/zizmor.yml`, `clippy.toml`, `.gitleaks.toml`, `.jscpd.json`, `.typos.toml`) | project; Pawl keeps a file current through `pawl rules sync` until someone edits it | written only when missing |
+| `.pawl/sgconfig.yml`, `.pawl/rules/*.yml` | project; Pawl keeps a file current through `pawl rules sync` until someone edits it, and recreates a missing one | the ast-grep pack, templated with `config_module` and `own_module` |
+| `.pawl/generated.json` | pawl, committed | the hash of each rule file as Pawl wrote it; how `pawl rules sync` tells an unedited file from an edited one |
 | `.pawl/baseline.json` | project, through `pawl baseline` | the ratchet |
 | `.githooks/pre-commit` | project | `pawl run precommit` (`make precommit`, timed); plain `make precommit` when pawl is missing |
 | `.github/workflows/check.yml`, `nightly.yml`, `review.yml` | project | the rings, with the "Set up Pawl" action pinned and `PAWL_REQUIRED=1`; `review.yml` is `workflow_dispatch` only, off by default |
@@ -240,6 +241,14 @@ manifest.
     so Dependabot keeps every project current; a build without that commit (a development build, `go install`)
     writes a verified download step instead. The checksum file comes from the same release: it catches a corrupt
     download, not a compromised release.
+19. `pawl rules sync` updates a rule file only when nobody edited it, and the unit is the whole file: one edit makes
+    the file the project's, and Pawl leaves all of it alone. Merging new settings into an edited YAML, TOML or
+    JSONC file is fragile, and a wrong merge silently changes which lint rules run. `.pawl/generated.json`
+    records the hash of each file as Pawl wrote it: a file whose hash matches the record is unedited and gets the
+    current rendering; any other differing file is kept and listed. `--force <path>` takes Pawl's version of a
+    named file anyway. A tool configuration Pawl recorded and the project deleted stays deleted; a missing file
+    of the `.pawl/` pack is recreated, since the pack is Pawl's. A project from before the record gets one on its
+    first sync: a file identical to the current rendering is adopted, any other counts as edited.
 
 ## Known limits
 
@@ -263,3 +272,5 @@ manifest.
    (the action of the commit, `version: latest`), not from a second repository.
 10. Go: a package whose files all carry a build tag stops golangci-lint ("build constraints exclude all Go
     files") when one of its files is staged or linted; list the tag under `run.build-tags` in `.golangci.yml`.
+11. In a project without `.pawl/generated.json`, a rule file written by an older Pawl differs from the current
+    rendering and has no record, so `pawl rules sync` counts it as edited until `--force <path>` adopts it.

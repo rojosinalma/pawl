@@ -89,6 +89,10 @@ stack keeps it (`go.mod`, `.ruby-version`, `.python-version`, `rust-toolchain.to
 `pawl init` never overwrites a file. An existing `Makefile` gains only the targets it lacks; existing linter
 configurations stay as they are, and `pawl verify` then reports which catalog rules they do not enforce.
 
+`pawl rules sync` brings the rule files Pawl wrote up to date with the installed Pawl, but only the ones nobody
+edited. An edited file stays as it is and is listed; `pawl rules sync --force <path>` takes Pawl's version of it.
+Tool versions are not part of it: `mise` owns them.
+
 Day to day:
 
 | Command | Purpose |
@@ -98,7 +102,7 @@ Day to day:
 | `pawl run <target>` | a `make` target through Pawl: a complete ring check (`precommit`, `check`, `nightly`) or any other task (`lint`, `fmt`, `test`); `--verbose` streams `make` output, `--no-toolbox` stays local |
 | `pawl verify` | the Pawl catalog verification alone (manifest, targets, tool configurations, text checks, ratchet); `make check` ends with it |
 | `pawl status` | why the pull request of this branch fails: the check, the first file and line, the fix |
-| `pawl rules` | the catalog with what this project does about each rule; `pawl rules show <id>` explains one |
+| `pawl rules` | the catalog with what this project does about each rule; `pawl rules show <id>` explains one; `pawl rules sync` updates the rule files nobody edited |
 | `pawl baseline` | record improved ratchet values; `--grow "reason"` is the one way up |
 | `pawl budget` | the median time of each ring against its target and limit |
 | `make check` | lint, the affected tests, and the catalog verification; the same command CI runs |
