@@ -2,6 +2,7 @@ package scaffold
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -362,5 +363,31 @@ func TestPawlURL(t *testing.T) {
 func TestUsesUnknownAction(t *testing.T) {
 	if _, err := uses("someone/unpinned"); err == nil {
 		t.Error("an unpinned action rendered")
+	}
+}
+
+func TestHookRunsTheRingInTheToolboxWhenTheCloneNamesOne(t *testing.T) {
+	dir := goShellProject(t, true)
+	mustInit(t, dir, Options{})
+	if err := gitCmd(t, dir, "config", "pawl.toolbox", "example.com/toolbox:1").Run(); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	fakeDocker := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"" + filepath.Join(bin, "args") + "\"\nexit 7\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(fakeDocker), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), filepath.Join(dir, hookPath))
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	err := cmd.Run()
+	if err == nil || cmd.ProcessState.ExitCode() != 7 {
+		t.Fatalf("the hook must exit with the container's status 7, got %v", err)
+	}
+	args := readFile(t, bin, "args")
+	for _, want := range []string{"run", "--rm", "example.com/toolbox:1", dir + ":/work", "make precommit"} {
+		if !strings.Contains(args, want) {
+			t.Errorf("docker arguments lack %q:\n%s", want, args)
+		}
 	}
 }

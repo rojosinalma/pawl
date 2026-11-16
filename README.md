@@ -101,6 +101,12 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work \
   ghcr.io/rojosinalma/pawl-toolbox:latest make check
 ```
 
+A machine without the tools can also run the git hook in the image; set it once per clone:
+
+```sh
+git config pawl.toolbox ghcr.io/rojosinalma/pawl-toolbox:latest
+```
+
 ## Design
 
 [`docs/design.md`](docs/design.md) has the catalog, the manifest format, the ratchet, the rings and the decisions

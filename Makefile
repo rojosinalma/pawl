@@ -8,8 +8,8 @@ SHELL := /bin/sh
 PAWL_EXCLUDE ?= ^(test/fixtures/)
 PAWL_BASE ?= origin/main
 DIFF_COVERAGE ?= 80
-# this repository checks itself with the pawl it builds
-PAWL ?= go run ./cmd/pawl
+# this repository checks itself with the pawl it builds: ./pawl after `make build`, else compiled on the fly
+PAWL ?= $(if $(wildcard ./pawl),./pawl,go run ./cmd/pawl)
 STAGED := $(shell git diff --cached --name-only --diff-filter=ACMR)
 REPORTS := .pawl/reports
 # extra ast-grep flags, for example --globs '!gen/**' to skip generated code
