@@ -235,6 +235,7 @@ func repoProject(t *testing.T) *project.Project {
 }
 
 func TestScopeInRepo(t *testing.T) {
+	t.Setenv("PAWL_FULL", "") // the scope under test is the affected one, whatever the caller's environment says
 	p := repoProject(t)
 	run := execRunner{timeout: 30 * time.Second}
 	got, err := scope(p, "python", run)
