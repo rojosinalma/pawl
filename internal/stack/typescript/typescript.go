@@ -235,7 +235,7 @@ func (Adapter) Make(p stack.Params) stack.Make {
 		},
 		Test: []string{test},
 		Precommit: []string{
-			`@[ -z "$(STAGED_TS)" ] || biome check $(STAGED_TS)`,
+			`@[ -z "$(STAGED_TS)" ] || biome check --no-errors-on-unmatched $(STAGED_TS)`,
 		},
 		Audit:    []string{audit},
 		Mutation: []string{"stryker run"},

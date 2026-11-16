@@ -19,3 +19,6 @@ error[fetch-without-timeout-ts]
 error[dynamic-code-ts]
 error[mock-own-module-ts]
 Unused exports
+lint/suspicious/noDebugger
+lint/style/noDefaultExport
+lint/correctness/noUnusedImports

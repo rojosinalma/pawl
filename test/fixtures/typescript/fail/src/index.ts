@@ -11,3 +11,4 @@ export { download } from './fetcher';
 export { run } from './dynamic';
 export { formatted } from './format';
 export { kind } from './kinds';
+export { default as one } from './defaults';
