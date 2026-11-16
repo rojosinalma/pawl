@@ -16,10 +16,10 @@ import (
 
 // Pinned versions of the tools without a native pin file (Renovate moves them in mise.toml).
 const (
-	BiomeVersion             = "2.6.8"
-	OxlintVersion            = "1.93.0"
-	KnipVersion              = "6.45.1"
-	StrykerVersion           = "10.1.1"
+	BiomeVersion   = "2.6.8"
+	OxlintVersion  = "1.93.0"
+	KnipVersion    = "6.45.1"
+	StrykerVersion = "10.1.1"
 )
 
 type Adapter struct{}

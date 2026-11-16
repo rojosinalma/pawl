@@ -62,8 +62,12 @@ func (Adapter) Tools() []stack.Tool {
 	}
 }
 
-func (Adapter) SourceGlobs() []string { return []string{"**/*.rb", "**/*.rake", "Gemfile", "Rakefile", "**/*.gemspec"} }
-func (Adapter) TestGlobs() []string   { return []string{"**/*_test.rb", "**/*_spec.rb", "test/**", "spec/**"} }
+func (Adapter) SourceGlobs() []string {
+	return []string{"**/*.rb", "**/*.rake", "Gemfile", "Rakefile", "**/*.gemspec"}
+}
+func (Adapter) TestGlobs() []string {
+	return []string{"**/*_test.rb", "**/*_spec.rb", "test/**", "spec/**"}
+}
 
 func (Adapter) Pins() []stack.Pin {
 	return []stack.Pin{{What: "Ruby version (.ruby-version or the Gemfile ruby directive)", Files: []string{".ruby-version", ".tool-versions", "mise.toml"}, Locks: []string{"Gemfile.lock"}}}
