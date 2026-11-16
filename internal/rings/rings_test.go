@@ -15,24 +15,9 @@ import (
 	"github.com/rojosinalma/pawl/internal/manifest"
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/report"
+	"github.com/rojosinalma/pawl/internal/runner"
+	"github.com/rojosinalma/pawl/internal/runner/runnertest"
 )
-
-type reply struct {
-	out string
-	err error
-}
-
-// fakeRunner answers commands by their joined name and arguments; a missing key is a failure.
-type fakeRunner map[string]reply
-
-func (f fakeRunner) Output(_, name string, args ...string) ([]byte, error) {
-	key := strings.Join(append([]string{name}, args...), " ")
-	r, ok := f[key]
-	if !ok {
-		return nil, fmt.Errorf("unexpected command %q", key)
-	}
-	return []byte(r.out), r.err
-}
 
 func newProject(t *testing.T, repo bool) *project.Project {
 	t.Helper()
@@ -222,15 +207,15 @@ func jobsJSON(work int) string {
  {"name":"Complete job","startedAt":"2026-11-01T10:31:00Z","completedAt":"2026-11-01T10:32:00Z"}]}]}`, 2+work)
 }
 
-func ciRunner(branch string) fakeRunner {
-	return fakeRunner{
-		"git remote get-url origin":                                      {out: "git@github.com:o/r.git\n"},
-		"gh repo view --json defaultBranchRef -q .defaultBranchRef.name": {out: branch},
-		"gh run list --workflow check.yml --branch trunk --status completed --limit 10 --json databaseId,conclusion,createdAt,updatedAt": {out: runList},
-		"gh run view 1 --json jobs": {out: jobsJSON(11)},
-		"gh run view 3 --json jobs": {out: jobsJSON(11)},
-		"gh run view 4 --json jobs": {err: errors.New("boom")},
-		"gh run list --workflow nightly.yml --branch trunk --status completed --limit 10 --json databaseId,conclusion,createdAt,updatedAt": {out: "[]"},
+func ciRunner(branch string) runnertest.Script {
+	return runnertest.Script{
+		"git remote get-url origin":                                      {Out: "git@github.com:o/r.git\n"},
+		"gh repo view --json defaultBranchRef -q .defaultBranchRef.name": {Out: branch},
+		"gh run list --workflow check.yml --branch trunk --status completed --limit 10 --json databaseId,conclusion,createdAt,updatedAt": {Out: runList},
+		"gh run view 1 --json jobs": {Out: jobsJSON(11)},
+		"gh run view 3 --json jobs": {Out: jobsJSON(11)},
+		"gh run view 4 --json jobs": {Err: errors.New("boom")},
+		"gh run list --workflow nightly.yml --branch trunk --status completed --limit 10 --json databaseId,conclusion,createdAt,updatedAt": {Out: "[]"},
 	}
 }
 
@@ -255,7 +240,7 @@ func TestBudgetCIFallsBackToManifestBase(t *testing.T) {
 	delete(p.Manifest.Rings, "precommit")
 	p.Manifest.Base = "origin/trunk"
 	run := ciRunner("")
-	run["gh repo view --json defaultBranchRef -q .defaultBranchRef.name"] = reply{err: errors.New("auth")}
+	run["gh repo view --json defaultBranchRef -q .defaultBranchRef.name"] = runnertest.Reply{Err: errors.New("auth")}
 	r, err := budget(p, run)
 	if err != nil || len(r.Checked) != 1 {
 		t.Fatalf("got %+v, %v", r, err)
@@ -266,23 +251,23 @@ func TestBudgetCIUnavailable(t *testing.T) {
 	cases := []struct {
 		name string
 		repo bool
-		run  fakeRunner
+		run  runnertest.Script
 		want string
 	}{
-		{"no repo", false, fakeRunner{}, "check: not a git repository"},
-		{"no remote", true, fakeRunner{}, "check: no origin remote"},
-		{"no gh", true, fakeRunner{
-			"git remote get-url origin":                                      {out: "x"},
-			"gh repo view --json defaultBranchRef -q .defaultBranchRef.name": {err: fmt.Errorf("gh: %w", exec.ErrNotFound)},
+		{"no repo", false, runnertest.Script{}, "check: not a git repository"},
+		{"no remote", true, runnertest.Script{}, "check: no origin remote"},
+		{"no gh", true, runnertest.Script{
+			"git remote get-url origin":                                      {Out: "x"},
+			"gh repo view --json defaultBranchRef -q .defaultBranchRef.name": {Err: fmt.Errorf("gh: %w", exec.ErrNotFound)},
 		}, "check: gh is not installed"},
-		{"list fails", true, fakeRunner{
-			"git remote get-url origin":                                      {out: "x"},
-			"gh repo view --json defaultBranchRef -q .defaultBranchRef.name": {out: "trunk"},
+		{"list fails", true, runnertest.Script{
+			"git remote get-url origin":                                      {Out: "x"},
+			"gh repo view --json defaultBranchRef -q .defaultBranchRef.name": {Out: "trunk"},
 		}, "check: gh run list failed"},
-		{"bad json", true, fakeRunner{
-			"git remote get-url origin":                                      {out: "x"},
-			"gh repo view --json defaultBranchRef -q .defaultBranchRef.name": {out: "trunk"},
-			"gh run list --workflow check.yml --branch trunk --status completed --limit 10 --json databaseId,conclusion,createdAt,updatedAt": {out: "{"},
+		{"bad json", true, runnertest.Script{
+			"git remote get-url origin":                                      {Out: "x"},
+			"gh repo view --json defaultBranchRef -q .defaultBranchRef.name": {Out: "trunk"},
+			"gh run list --workflow check.yml --branch trunk --status completed --limit 10 --json databaseId,conclusion,createdAt,updatedAt": {Out: "{"},
 		}, "check: gh run list output"},
 	}
 	for _, tc := range cases {
@@ -301,19 +286,19 @@ func TestBudgetCIUnavailable(t *testing.T) {
 }
 
 func TestRunDurationBadJobs(t *testing.T) {
-	c := &ciSource{p: newProject(t, true), run: fakeRunner{"gh run view 9 --json jobs": {out: "nope"}}}
+	c := &ciSource{p: newProject(t, true), run: runnertest.Script{"gh run view 9 --json jobs": {Out: "nope"}}}
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	if d := c.runDuration(ghRun{DatabaseID: 9, CreatedAt: start, UpdatedAt: start.Add(time.Minute)}); d != time.Minute {
 		t.Fatalf("fallback %v", d)
 	}
-	c.run = fakeRunner{"gh run view 9 --json jobs": {out: `{"jobs":[]}`}}
+	c.run = runnertest.Script{"gh run view 9 --json jobs": {Out: `{"jobs":[]}`}}
 	if d := c.runDuration(ghRun{DatabaseID: 9, CreatedAt: start, UpdatedAt: start.Add(time.Minute)}); d != time.Minute {
 		t.Fatalf("empty jobs fallback %v", d)
 	}
 }
 
 func TestExecRunner(t *testing.T) {
-	run := execRunner{timeout: 10 * time.Second}
+	run := runner.Exec{Timeout: 10 * time.Second}
 	out, err := run.Output(t.TempDir(), "git", "--version")
 	if err != nil || !strings.HasPrefix(string(out), "git version") {
 		t.Fatalf("git --version: %q %v", out, err)

@@ -1,43 +1,15 @@
 package gitx
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
-
-func git(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-}
-
-func write(t *testing.T, root, rel, content string) {
-	t.Helper()
-	path := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func repo(t *testing.T) (*Repo, string) {
 	t.Helper()
-	root := t.TempDir()
-	git(t, root, "init", "-q", "-b", "main")
-	write(t, root, "a.txt", "one\n")
-	write(t, root, ".gitignore", "ignored/\n")
-	write(t, root, "ignored/x.txt", "x\n")
-	git(t, root, "add", "-A")
-	git(t, root, "commit", "-q", "-m", "first commit")
+	root := testrepo.New(t, map[string]string{"a.txt": "one\n", ".gitignore": "ignored/\n", "ignored/x.txt": "x\n"})
 	r, err := Open(root)
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +22,7 @@ func TestOpenAndFiles(t *testing.T) {
 	if !IsRepo(root) || IsRepo(t.TempDir()) {
 		t.Error("IsRepo is wrong")
 	}
-	write(t, root, "new.txt", "new\n")
+	testrepo.Write(t, root, "new.txt", "new\n")
 	files, err := r.Files()
 	if err != nil {
 		t.Fatal(err)
@@ -72,10 +44,10 @@ func TestOpenAndFiles(t *testing.T) {
 
 func TestStagedChangedAndShow(t *testing.T) {
 	r, root := repo(t)
-	git(t, root, "branch", "base")
-	write(t, root, "a.txt", "one\ntwo\nthree\n")
-	write(t, root, "b.txt", "b\n")
-	git(t, root, "add", "b.txt")
+	testrepo.Git(t, root, "branch", "base")
+	testrepo.Write(t, root, "a.txt", "one\ntwo\nthree\n")
+	testrepo.Write(t, root, "b.txt", "b\n")
+	testrepo.Git(t, root, "add", "b.txt")
 	staged, err := r.Staged()
 	if err != nil || !reflect.DeepEqual(staged, []string{"b.txt"}) {
 		t.Errorf("Staged = %v %v", staged, err)
@@ -102,7 +74,7 @@ func TestStagedChangedAndShow(t *testing.T) {
 	if _, ok := r.Show(base, "b.txt"); ok {
 		t.Error("Show returned a file that did not exist at the base")
 	}
-	git(t, root, "commit", "-q", "-am", "second commit")
+	testrepo.Git(t, root, "commit", "-q", "-am", "second commit")
 	subjects, err := r.Log(base)
 	if err != nil || !reflect.DeepEqual(subjects, []string{"second commit"}) {
 		t.Errorf("Log = %v %v", subjects, err)

@@ -2,34 +2,22 @@ package project
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/rojosinalma/pawl/internal/manifest"
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
-
-func write(t *testing.T, root, rel, content string) {
-	t.Helper()
-	path := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func goShellProject(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, root, "go.mod", "module example.com/app\n\ngo 1.25\n")
-	write(t, root, "main.go", "package main\n\nfunc main() {}\n")
-	write(t, root, "main_test.go", "package main\n")
-	write(t, root, "bin/run.sh", "#!/usr/bin/env bash\nset -euo pipefail\n")
-	write(t, root, "node_modules/x/index.js", "x\n")
-	write(t, root, "gen/big.go", "package gen\n")
+	testrepo.Write(t, root, "go.mod", "module example.com/app\n\ngo 1.25\n")
+	testrepo.Write(t, root, "main.go", "package main\n\nfunc main() {}\n")
+	testrepo.Write(t, root, "main_test.go", "package main\n")
+	testrepo.Write(t, root, "bin/run.sh", "#!/usr/bin/env bash\nset -euo pipefail\n")
+	testrepo.Write(t, root, "node_modules/x/index.js", "x\n")
+	testrepo.Write(t, root, "gen/big.go", "package gen\n")
 	return root
 }
 

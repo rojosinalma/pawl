@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/rojosinalma/pawl/internal/project"
+	"github.com/rojosinalma/pawl/internal/runner"
 )
 
 // goPackage is the part of `go list -json` the closure needs.
@@ -30,7 +31,7 @@ func goStrategy() strategy {
 	}
 }
 
-func goAffected(p *project.Project, run runner, changed []string) (string, bool) {
+func goAffected(p *project.Project, run runner.Runner, changed []string) (string, bool) {
 	out, err := run.Output(p.Root, "go", "list", "-json", "./...")
 	if err != nil {
 		return "", false
@@ -182,7 +183,7 @@ func rustStrategy() strategy {
 	}
 }
 
-func rustAffected(p *project.Project, run runner, changed []string) (string, bool) {
+func rustAffected(p *project.Project, run runner.Runner, changed []string) (string, bool) {
 	out, err := run.Output(p.Root, "cargo", "metadata", "--format-version", "1", "--no-deps")
 	if err != nil {
 		return "", false

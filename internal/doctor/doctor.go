@@ -3,8 +3,6 @@
 package doctor
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -18,6 +16,7 @@ import (
 	"github.com/rojosinalma/pawl/internal/config"
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/report"
+	"github.com/rojosinalma/pawl/internal/runner"
 	"github.com/rojosinalma/pawl/internal/stack"
 )
 
@@ -30,29 +29,6 @@ const (
 )
 
 var versionPattern = regexp.MustCompile(`\d+\.\d+(\.\d+)?`)
-
-// runner runs a command and returns its combined output (some tools print their version on stderr).
-type runner interface {
-	Output(dir, name string, args ...string) ([]byte, error)
-}
-
-type execRunner struct{ timeout time.Duration }
-
-// Output runs the command in dir under the runner's timeout and returns standard output and standard error
-// combined, since a version banner may land on either; a failure carries the command line.
-func (e execRunner) Output(dir, name string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		return out.Bytes(), fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
-	}
-	return out.Bytes(), nil
-}
 
 // item is one program to check; required programs that are missing are errors, the others warnings.
 type item struct {
@@ -70,10 +46,10 @@ type result struct {
 // Run checks the tools of every active adapter (missing tool for the precommit or check ring: error; nightly-only:
 // warning; version differs from the pin: error), make, git, the hook path, and gh (warning when absent).
 func Run(p *project.Project) (*report.Report, error) {
-	return run(p, execRunner{timeout: toolTimeout}, config.Verbose())
+	return run(p, runner.Exec{Timeout: toolTimeout, IsCombined: true}, config.Verbose())
 }
 
-func run(p *project.Project, r runner, verbose bool) (*report.Report, error) {
+func run(p *project.Project, r runner.Runner, verbose bool) (*report.Report, error) {
 	rep := &report.Report{Checked: []string{rulePinned, ruleHook}}
 	for _, res := range checkAll(p.Root, items(p), r, verbose) {
 		if res.finding != nil {
@@ -122,7 +98,7 @@ func needed(rings []string) bool {
 }
 
 // checkAll runs the checks with at most `parallel` at once and returns the results in item order.
-func checkAll(root string, list []item, r runner, verbose bool) []result {
+func checkAll(root string, list []item, r runner.Runner, verbose bool) []result {
 	results := make([]result, len(list))
 	sem := make(chan struct{}, parallel)
 	var wg sync.WaitGroup
@@ -139,7 +115,7 @@ func checkAll(root string, list []item, r runner, verbose bool) []result {
 	return results
 }
 
-func checkOne(root string, it item, r runner, verbose bool) result {
+func checkOne(root string, it item, r runner.Runner, verbose bool) result {
 	t := it.tool
 	if len(t.Check) == 0 {
 		return result{skip: t.Name + ": no version command"}

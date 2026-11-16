@@ -4,26 +4,13 @@
   "metrics": {
     "code.file-size": 0,
     "code.todo-links": 0,
-    "escape.duplication": 14,
+    "escape.duplication": 1,
     "escape.suppressions": 2,
     "tests.quarantine": 0
   },
   "offenders": {
     "escape.duplication": [
-      ".github/workflows/check.yml ~ .github/workflows/nightly.yml",
-      "internal/affected/affected.go ~ internal/ghx/ghx.go",
-      "internal/affected/affected.go ~ internal/ghx/ghx.go",
-      "internal/affected/affected.go ~ internal/rings/rings.go",
-      "internal/affected/affected_test.go ~ internal/cli/cli_test.go",
-      "internal/affected/affected_test.go ~ internal/doctor/doctor_test.go",
-      "internal/affected/affected_test.go ~ internal/ghx/ghx_test.go",
-      "internal/affected/affected_test.go ~ internal/rings/rings_test.go",
-      "internal/cli/cli_test.go ~ internal/gitx/gitx_test.go",
-      "internal/cli/cli_test.go ~ internal/gitx/gitx_test.go",
-      "internal/cli/cli_test.go ~ internal/project/project_test.go",
-      "internal/stack/python/python_test.go ~ internal/stack/typescript/typescript_test.go",
-      "internal/stack/python/python_test.go ~ internal/stack/typescript/typescript_test.go",
-      "internal/stack/verify.go ~ internal/stack/verify.go"
+      ".github/workflows/check.yml ~ .github/workflows/nightly.yml"
     ],
     "escape.suppressions": [
       "internal/stack/common/rules/bounded-growth.yml.tmpl ast-grep-ignore",

@@ -2,13 +2,10 @@
 package rings
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -16,6 +13,7 @@ import (
 
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/report"
+	"github.com/rojosinalma/pawl/internal/runner"
 )
 
 const (
@@ -39,32 +37,6 @@ func isKnown(ring string) bool {
 		}
 	}
 	return false
-}
-
-// runner runs an outbound command and returns its standard output.
-type runner interface {
-	Output(dir, name string, args ...string) ([]byte, error)
-}
-
-type execRunner struct{ timeout time.Duration }
-
-// Output runs the command in dir under the runner's timeout and returns its standard output; a failure carries
-// the command line and its standard error.
-func (e execRunner) Output(dir, name string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return out, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, msg)
-		}
-		return out, fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
-	}
-	return out, nil
 }
 
 // entry is one recorded run.
@@ -153,10 +125,10 @@ func writeAtomic(path string, t *timings) error {
 // The precommit ring reads the local timings; the check and nightly rings read the last ten completed runs on the
 // default branch of the workflows named check and nightly through `gh run list`, when gh and a remote exist.
 func Budget(p *project.Project) (*report.Report, error) {
-	return budget(p, execRunner{timeout: cmdTimeout})
+	return budget(p, runner.Exec{Timeout: cmdTimeout})
 }
 
-func budget(p *project.Project, run runner) (*report.Report, error) {
+func budget(p *project.Project, run runner.Runner) (*report.Report, error) {
 	r := &report.Report{}
 	ci := &ciSource{p: p, run: run}
 	for _, name := range ringOrder(p) {

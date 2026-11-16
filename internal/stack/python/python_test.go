@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/rojosinalma/pawl/internal/stack"
+	"github.com/rojosinalma/pawl/internal/stack/stacktest"
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
 
 func params(facts map[string]string) stack.Params {
@@ -20,38 +22,13 @@ func writeDefaults(t *testing.T, p stack.Params) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, c := range (Adapter{}).Configs(p) {
-		write(t, dir, c.Path, c.Content)
+		testrepo.Write(t, dir, c.Path, c.Content)
 	}
 	return dir
 }
 
-func write(t *testing.T, dir, rel, content string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, rel), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func edit(t *testing.T, dir, rel, old, new string) {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(dir, rel))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(raw), old) {
-		t.Fatalf("%s lacks %q", rel, old)
-	}
-	write(t, dir, rel, strings.Replace(string(raw), old, new, 1))
-}
-
 func findings(dir string, p stack.Params) map[string][]string {
-	out := map[string][]string{}
-	for _, v := range (Adapter{}).Verifiers(p) {
-		for _, f := range v.Check(dir) {
-			out[f.RuleID] = append(out[f.RuleID], f.Message)
-		}
-	}
-	return out
+	return stacktest.Findings(dir, (Adapter{}).Verifiers(p))
 }
 
 func TestDefaultsPassTheirVerifiers(t *testing.T) {
@@ -78,7 +55,7 @@ func TestTurningARuleOffReports(t *testing.T) {
 		t.Run(c.rule+"/"+c.new, func(t *testing.T) {
 			p := params(nil)
 			dir := writeDefaults(t, p)
-			edit(t, dir, c.file, c.old, c.new)
+			stacktest.EditFile(t, dir, c.file, c.old, c.new)
 			if got := findings(dir, p); len(got[c.rule]) == 0 {
 				t.Fatalf("no %s finding; got %v", c.rule, got)
 			}
@@ -92,11 +69,11 @@ func TestRuffSectionInPyproject(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "ruff.toml")); err == nil {
 		t.Fatal("ruff.toml written although pyproject.toml has a [tool.ruff] section")
 	}
-	write(t, dir, "pyproject.toml", "[project]\nname = \"greeter\"\n\n[tool.ruff.lint]\nselect = [\"ALL\"]\nignore = [\"D\"]\n\n[tool.ruff.lint.mccabe]\nmax-complexity = 15\n")
+	testrepo.Write(t, dir, "pyproject.toml", "[project]\nname = \"greeter\"\n\n[tool.ruff.lint]\nselect = [\"ALL\"]\nignore = [\"D\"]\n\n[tool.ruff.lint.mccabe]\nmax-complexity = 15\n")
 	if got := findings(dir, p); len(got) > 0 {
 		t.Fatalf("pyproject selecting ALL reports %v", got)
 	}
-	edit(t, dir, "pyproject.toml", `ignore = ["D"]`, `ignore = ["D", "BLE"]`)
+	stacktest.EditFile(t, dir, "pyproject.toml", `ignore = ["D"]`, `ignore = ["D", "BLE"]`)
 	if got := findings(dir, p); len(got["code.swallowed-errors"]) == 0 {
 		t.Fatalf("ignoring BLE in pyproject.toml does not report; got %v", got)
 	}

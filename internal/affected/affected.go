@@ -19,42 +19,17 @@
 package affected
 
 import (
-	"bytes"
-	"context"
 	"fmt"
-	"os/exec"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/rojosinalma/pawl/internal/config"
 	"github.com/rojosinalma/pawl/internal/project"
+	"github.com/rojosinalma/pawl/internal/runner"
 )
 
 const cmdTimeout = 2 * time.Minute
-
-// runner runs an outbound command and returns its standard output.
-type runner interface {
-	Output(dir, name string, args ...string) ([]byte, error)
-}
-
-type execRunner struct{ timeout time.Duration }
-
-// Output runs the command in dir under the runner's timeout and returns its standard output; a failure carries
-// the command line and its standard error.
-func (e execRunner) Output(dir, name string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return out, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
 
 // strategy is one stack's way from a change set to a scope.
 type strategy struct {
@@ -62,7 +37,7 @@ type strategy struct {
 	nothing    string
 	owns       func(file string) bool
 	// affected returns the scope for a change that touches the stack; ok=false means run everything.
-	affected func(p *project.Project, run runner, changed []string) (scope string, ok bool)
+	affected func(p *project.Project, run runner.Runner, changed []string) (scope string, ok bool)
 }
 
 func strategies() map[string]strategy {
@@ -83,10 +58,10 @@ func strategies() map[string]strategy {
 // when a configuration, lockfile, Makefile, workflow or pawl.toml changed. A change that touches no file of the stack
 // returns the stack's "nothing" scope (see the package documentation).
 func Scope(p *project.Project, stackName string) (string, error) {
-	return scope(p, stackName, execRunner{timeout: cmdTimeout})
+	return scope(p, stackName, runner.Exec{Timeout: cmdTimeout})
 }
 
-func scope(p *project.Project, stackName string, run runner) (string, error) {
+func scope(p *project.Project, stackName string, run runner.Runner) (string, error) {
 	st, ok := strategies()[stackName]
 	if !ok {
 		return "", fmt.Errorf("unknown stack %q (known: %s)", stackName, strings.Join(project.StackNames(), ", "))
@@ -107,7 +82,7 @@ func scope(p *project.Project, stackName string, run runner) (string, error) {
 }
 
 // decide applies the global-file rule, the "nothing" rule and the stack's own mapping.
-func decide(p *project.Project, st strategy, run runner, changed []string, all string) string {
+func decide(p *project.Project, st strategy, run runner.Runner, changed []string, all string) string {
 	ours := false
 	for _, f := range changed {
 		if isGlobal(f) {
@@ -126,7 +101,7 @@ func decide(p *project.Project, st strategy, run runner, changed []string, all s
 
 // changes lists the changed, deleted and untracked paths between base and the working tree; ok is false when git
 // cannot tell, and the caller runs everything.
-func changes(p *project.Project, base string, run runner) (files []string, ok bool) {
+func changes(p *project.Project, base string, run runner.Runner) (files []string, ok bool) {
 	changed, err := p.Repo.Changed(base)
 	if err != nil {
 		return nil, false
@@ -192,6 +167,6 @@ func shellStrategy() strategy {
 	return strategy{
 		everything: func(*project.Project) string { return "" },
 		owns:       func(string) bool { return false },
-		affected:   func(*project.Project, runner, []string) (string, bool) { return "", true },
+		affected:   func(*project.Project, runner.Runner, []string) (string, bool) { return "", true },
 	}
 }
