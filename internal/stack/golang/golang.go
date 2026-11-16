@@ -19,7 +19,7 @@ const GolangciLintVersion = "2.15.0"
 
 // Go module tool versions pinned by `go get -tool`.
 const (
-	GovulncheckModule = "golang.org/x/vuln/cmd/govulncheck@v1.7.0"
+	GovulncheckModule = "golang.org/x/vuln/cmd/govulncheck@v1.9.0"
 	Gcov2lcovModule   = "github.com/jandelgado/gcov2lcov@v1.1.1"
 	GremlinsVersion   = "0.6.0"
 )

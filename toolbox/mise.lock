@@ -847,53 +847,53 @@ url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8
 url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378333178"
 
 [[tools.go]]
-version = "1.25.14"
+version = "1.27.4"
 backend = "core:go"
-specifiers = ["1.25.14"]
+specifiers = ["1.27.4"]
 
 [tools.go."platforms.linux-arm64"]
-checksum = "sha256:9bf234ea70ffec9347fdf6b22ce4add51717d3386a38a441e8c8743fceb5eaee"
-url = "https://dl.google.com/go/go1.25.14.linux-arm64.tar.gz"
+checksum = "sha256:3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92"
+url = "https://dl.google.com/go/go1.27.4.linux-arm64.tar.gz"
 
 [tools.go."platforms.linux-arm64-musl"]
-checksum = "sha256:9bf234ea70ffec9347fdf6b22ce4add51717d3386a38a441e8c8743fceb5eaee"
-url = "https://dl.google.com/go/go1.25.14.linux-arm64.tar.gz"
+checksum = "sha256:3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92"
+url = "https://dl.google.com/go/go1.27.4.linux-arm64.tar.gz"
 
 [tools.go."platforms.linux-x64"]
-checksum = "sha256:a21ae5633a269bcd7e90cf767e48225633795e99d831742cbf3397064fee7712"
-url = "https://dl.google.com/go/go1.25.14.linux-amd64.tar.gz"
+checksum = "sha256:7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
+url = "https://dl.google.com/go/go1.27.4.linux-amd64.tar.gz"
 
 [tools.go."platforms.linux-x64-baseline"]
-checksum = "sha256:a21ae5633a269bcd7e90cf767e48225633795e99d831742cbf3397064fee7712"
-url = "https://dl.google.com/go/go1.25.14.linux-amd64.tar.gz"
+checksum = "sha256:7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
+url = "https://dl.google.com/go/go1.27.4.linux-amd64.tar.gz"
 
 [tools.go."platforms.linux-x64-musl"]
-checksum = "sha256:a21ae5633a269bcd7e90cf767e48225633795e99d831742cbf3397064fee7712"
-url = "https://dl.google.com/go/go1.25.14.linux-amd64.tar.gz"
+checksum = "sha256:7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
+url = "https://dl.google.com/go/go1.27.4.linux-amd64.tar.gz"
 
 [tools.go."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:a21ae5633a269bcd7e90cf767e48225633795e99d831742cbf3397064fee7712"
-url = "https://dl.google.com/go/go1.25.14.linux-amd64.tar.gz"
+checksum = "sha256:7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
+url = "https://dl.google.com/go/go1.27.4.linux-amd64.tar.gz"
 
 [tools.go."platforms.macos-arm64"]
-checksum = "sha256:5b26c0b6f308240fca2614fb02f622cfcc8c0cc3b69c78bba4845489a4590259"
-url = "https://dl.google.com/go/go1.25.14.darwin-arm64.tar.gz"
+checksum = "sha256:91a44a2b8a716600ad94a4f143e156116620db8828086a6e3602291be9bd0bb4"
+url = "https://dl.google.com/go/go1.27.4.darwin-arm64.tar.gz"
 
 [tools.go."platforms.macos-x64"]
-checksum = "sha256:b09087a67d5792a8b0fcbf74212d62560c94ac8a8fd750ff920d8cb5f1e20118"
-url = "https://dl.google.com/go/go1.25.14.darwin-amd64.tar.gz"
+checksum = "sha256:2b799377704ef12db39bd254995d5c348c9cc8d86562ca817724390e56c38f43"
+url = "https://dl.google.com/go/go1.27.4.darwin-amd64.tar.gz"
 
 [tools.go."platforms.macos-x64-baseline"]
-checksum = "sha256:b09087a67d5792a8b0fcbf74212d62560c94ac8a8fd750ff920d8cb5f1e20118"
-url = "https://dl.google.com/go/go1.25.14.darwin-amd64.tar.gz"
+checksum = "sha256:2b799377704ef12db39bd254995d5c348c9cc8d86562ca817724390e56c38f43"
+url = "https://dl.google.com/go/go1.27.4.darwin-amd64.tar.gz"
 
 [tools.go."platforms.windows-x64"]
-checksum = "sha256:119044a92b3987c341cd6aebb256676dd4780d292f7b4e72a3e9976677841697"
-url = "https://dl.google.com/go/go1.25.14.windows-amd64.zip"
+checksum = "sha256:178ab98950ac69ab25069307dc6ade79f3816e414cce95b4da166a115cde1e7e"
+url = "https://dl.google.com/go/go1.27.4.windows-amd64.zip"
 
 [tools.go."platforms.windows-x64-baseline"]
-checksum = "sha256:119044a92b3987c341cd6aebb256676dd4780d292f7b4e72a3e9976677841697"
-url = "https://dl.google.com/go/go1.25.14.windows-amd64.zip"
+checksum = "sha256:178ab98950ac69ab25069307dc6ade79f3816e414cce95b4da166a115cde1e7e"
+url = "https://dl.google.com/go/go1.27.4.windows-amd64.zip"
 
 [[tools.golangci-lint]]
 version = "2.15.0"
@@ -1085,12 +1085,6 @@ url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2-win-x64.zip"
 [tools.node."platforms.windows-x64-baseline"]
 checksum = "sha256:ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2"
 url = "https://nodejs.org/dist/v24.22.2/node-v24.22.2-win-x64.zip"
-
-[[tools."npm:dependency-cruiser"]]
-version = "18.7.2"
-aube = { path = ".mise/locks/npm-dependency-cruiser/18.7.2", digest = "sha256:3e3c424f53e0dcb4cc3eb21df4c92bc257b3aeff8dfdff5f147d056834566fac" }
-backend = "npm:dependency-cruiser"
-specifiers = ["18.7.2"]
 
 [[tools."npm:jscpd"]]
 version = "5.4.3"

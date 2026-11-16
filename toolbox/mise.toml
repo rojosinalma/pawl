@@ -8,7 +8,7 @@ experimental = false
 
 [tools]
 # runtimes
-go = "1.25.14"
+go = "1.27.4"
 node = "24.22.2"
 bun = "1.4.4"
 python = "3.13.18"

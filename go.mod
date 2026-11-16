@@ -1,6 +1,6 @@
 module github.com/rojosinalma/pawl
 
-go 1.25.0
+go 1.26.9
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -12,6 +12,15 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jandelgado/gcov2lcov v1.1.1 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
+	golang.org/x/mod v0.42.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/telemetry v0.0.0-20261010193011-f71dc92da45e // indirect
+	golang.org/x/tools v0.52.0 // indirect
+	golang.org/x/vuln v1.9.0 // indirect
 )
 
-tool github.com/jandelgado/gcov2lcov
+tool (
+	github.com/jandelgado/gcov2lcov
+	golang.org/x/vuln/cmd/govulncheck
+)
