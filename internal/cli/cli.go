@@ -77,7 +77,7 @@ func newRoot(version string, stdout, stderr io.Writer) *cobra.Command {
 		Short: "Write the manifest, the missing tool configurations, the make targets, the hook and the workflows",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			res, err := scaffold.Init(dir, scaffold.Options{Stacks: initStacks, DryRun: initDry})
+			res, err := scaffold.Init(dir, scaffold.Options{Stacks: initStacks, DryRun: initDry, Version: version})
 			if err != nil {
 				return err
 			}
@@ -92,7 +92,13 @@ func newRoot(version string, stdout, stderr io.Writer) *cobra.Command {
 			if len(res.Waived) > 0 {
 				fmt.Fprintf(stdout, "\n%d rules are waived by default; each is a decision for this project (`pawl rules --waived`).\n", len(res.Waived))
 			}
-			fmt.Fprintln(stdout, "\nnext: `pawl doctor` (tools), `make check` (the gate), then commit.")
+			if len(res.Hints) > 0 {
+				fmt.Fprintln(stdout, "\nstill to run:")
+				for _, h := range res.Hints {
+					fmt.Fprintf(stdout, "  %s\n", h)
+				}
+			}
+			fmt.Fprintln(stdout, "\nnext: `mise install` (the pinned tools), `pawl doctor`, `make check`, then commit.")
 			return nil
 		},
 	}

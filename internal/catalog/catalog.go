@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -71,13 +72,10 @@ type file struct {
 	Rules []Rule `yaml:"rules"`
 }
 
-var loaded *Catalog
-
 // Load parses the embedded catalog once and validates it.
-func Load() (*Catalog, error) {
-	if loaded != nil {
-		return loaded, nil
-	}
+var Load = sync.OnceValues(parse)
+
+func parse() (*Catalog, error) {
 	var f file
 	if err := yaml.Unmarshal(raw, &f); err != nil {
 		return nil, fmt.Errorf("catalog: %w", err)
@@ -92,7 +90,6 @@ func Load() (*Catalog, error) {
 		}
 		c.byID[r.ID] = r
 	}
-	loaded = c
 	return c, nil
 }
 
