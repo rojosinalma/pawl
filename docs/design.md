@@ -137,7 +137,7 @@ metadata`), per changed file for the others, everything when a configuration, lo
 | Command | Does |
 |---|---|
 | `pawl init` | detect stacks; write `pawl.toml`, the tool configurations that are missing, the make targets that are missing, `.githooks/pre-commit`, `.pawl/` (ast-grep pack, baseline), the workflows, the `AGENTS.md` block, `.gitignore` lines; print the waived rules to decide on |
-| `pawl install` | install mise when the machine lacks it (pinned version, checksum verified), the tools pinned in `mise.toml`, and each stack's packages through its own package manager; then the `pawl doctor` report; `--no-mise` skips mise |
+| `pawl install` | install mise when the machine lacks it (pinned version, checksum verified), make when the machine lacks it (pinned version, through mise, linked into `~/.local/bin`), the tools pinned in `mise.toml`, and each stack's packages through its own package manager; then the `pawl doctor` report; `--no-mise` and `--no-make` skip the first two |
 | `pawl run <target>` | run `make <target>` with the pinned tools on PATH: one line when it passes, the failing steps when it does not; a ring (`precommit`, `check`, `nightly`) also gets its wall time recorded; runs in the toolbox image when `git config pawl.toolbox` names one; `--verbose`, `--no-toolbox` |
 | `pawl verify` | the catalog verification: manifest, targets, verifiers, text checks, ratchet; `--ring precommit` limits it to the fast checks on staged files; `--format text\|json\|sarif\|github` |
 | `pawl doctor` | every tool pinned and present at the pinned version; hook installed; `make` targets exist; `gh` present |
@@ -228,7 +228,10 @@ manifest.
     when pawl is missing. `pawl check`, which named the verification in v0.1 and the gate later, was removed; it
     only names the two commands that replace it.
 15. `pawl install` wraps mise and the stacks' package managers rather than installing tools itself. On a machine
-    without mise it downloads a pinned mise release and verifies its checksum before it runs it.
+    without mise it downloads a pinned mise release and verifies its checksum before it runs it. make and mise
+    are Pawl's two hard dependencies, and the only things Pawl installs itself: make has no official binary, so a
+    machine without make gets the pinned GNU Make of mise's registry (a conda-forge build; mise verifies it),
+    linked into `~/.local/bin`. Every other tool is mise's business.
 16. `drift.pr-size` is skipped on the base branch (`main` for `origin/main`): commits there are not a pull request.
 17. `pawl run` takes any make target; only the three rings are timed for `pawl budget`.
 

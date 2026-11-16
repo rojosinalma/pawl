@@ -51,7 +51,7 @@ With Pawl:
 ```sh
 cd your-project
 pawl init        # detect the stacks; write pawl.toml, missing tool configs, make targets, the hook, the workflows
-pawl install     # mise when the machine lacks it, the pinned tools, each stack's packages; then `pawl doctor`
+pawl install     # mise and make when the machine lacks them, the pinned tools, each stack's packages; then `pawl doctor`
 pawl run lint    # the first run shows what the code owes; fix what you want to fix now
 pawl baseline    # record the rest (suppressions, duplicated blocks, oversized files): from here it only shrinks
 pawl run check   # the merge gate, quietly: one line when it passes, only the failing steps when it does not
@@ -85,7 +85,7 @@ Day to day:
 
 | Command | Purpose |
 |---|---|
-| `pawl install` | mise when it is missing, the tools pinned in `mise.toml`, each stack's packages; then `pawl doctor` |
+| `pawl install` | `mise` and `make` when they are missing, the tools pinned in `mise.toml`, each stack's packages; then `pawl doctor`; `--no-mise` and `--no-make` skip those two |
 | `pawl run check` | `make check` through Pawl: quiet output, the pinned tools on PATH, the toolbox fallback, timing |
 | `pawl run <target>` | a `make` target through Pawl: a complete ring check (`precommit`, `check`, `nightly`) or any other task (`lint`, `fmt`, `test`); `--verbose` streams `make` output, `--no-toolbox` stays local |
 | `pawl verify` | the Pawl catalog verification alone (manifest, targets, tool configurations, text checks, ratchet); `make check` ends with it |

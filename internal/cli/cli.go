@@ -143,7 +143,7 @@ func (a *app) installCmd() *cobra.Command {
 	var opts install.Options
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install mise when it is missing, the tools pinned in mise.toml and each stack's packages, then run doctor",
+		Short: "Install mise and make when they are missing, the tools pinned in mise.toml and each stack's packages, then run doctor",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			p, err := project.Load(a.dir)
@@ -171,6 +171,7 @@ func (a *app) installCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.SkipMise, "no-mise", false, "leave a machine without mise alone; run only the stacks' own steps")
+	cmd.Flags().BoolVar(&opts.SkipMake, "no-make", false, "leave a machine without make alone; do not install make through mise")
 	return cmd
 }
 
