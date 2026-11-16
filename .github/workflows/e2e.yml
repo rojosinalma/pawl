@@ -64,3 +64,26 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: make "${TARGET}" E2E_PROJECT="${RUNNER_TEMP}/project"
+
+  # The setup action installs a released pawl on both runner systems it supports.
+  action:
+    name: the setup action installs a released pawl (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: pawl
+        uses: ./
+        with:
+          version: latest
+      - name: pawl is on the PATH and reports the version the action output
+        env:
+          REPORTED: ${{ steps.pawl.outputs.version }}
+        run: |
+          pawl --version
+          [[ "$(pawl --version)" == "pawl version ${REPORTED}" ]]
