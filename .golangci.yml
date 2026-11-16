@@ -69,3 +69,5 @@ issues:
 
 run:
   timeout: 5m
+  # test/e2e is built only with this tag; without it the linter sees a package with no files and stops
+  build-tags: [e2e]

@@ -37,7 +37,7 @@ func run(t *testing.T, dir string, name string, args ...string) (string, error) 
 // runEnv is run with extra environment variables, which override the defaults.
 func runEnv(t *testing.T, dir string, env []string, name string, args ...string) (string, error) {
 	t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(t.Context(), name, args...)
 	cmd.Dir = dir
 	cmd.Env = append(append(os.Environ(),
 		"PAWL="+pawlBin(), "PAWL_FULL=1", "PAWL_REQUIRED=",
@@ -82,39 +82,49 @@ func TestFixtures(t *testing.T) {
 			continue
 		}
 		if _, err := os.Stat(filepath.Join(stackDir, "pass")); err == nil {
-			t.Run(stack+"/pass", func(t *testing.T) {
-				dir := prepare(t, filepath.Join(stackDir, "pass"))
-				if setup, err := os.ReadFile(filepath.Join(stackDir, "setup")); err == nil {
-					must(t, dir, "sh", "-ec", string(setup))
-				}
-				must(t, dir, "make", "fmt-check", "lint", "test")
-				if os.Getenv("PAWL_E2E_CHECK") == "1" {
-					must(t, dir, "git", "add", "-A")
-					must(t, dir, pawlBin(), "baseline")
-					must(t, dir, pawlBin(), "verify")
-				}
-			})
+			t.Run(stack+"/pass", func(t *testing.T) { passFixture(t, stackDir) })
 		}
 		if _, err := os.Stat(filepath.Join(stackDir, "fail")); err == nil {
-			t.Run(stack+"/fail", func(t *testing.T) {
-				dir := prepare(t, filepath.Join(stackDir, "fail"))
-				if setup, err := os.ReadFile(filepath.Join(stackDir, "setup")); err == nil {
-					must(t, dir, "sh", "-ec", string(setup))
-				}
-				out, err := run(t, dir, "make", "--keep-going", "lint")
-				if err == nil {
-					t.Fatalf("make lint passed on the fail fixture\n%s", out)
-				}
-				expect, err := os.ReadFile(filepath.Join(stackDir, "fail.expect"))
-				if err != nil {
-					return
-				}
-				for _, want := range strings.Split(strings.TrimSpace(string(expect)), "\n") {
-					if want = strings.TrimSpace(want); want != "" && !strings.Contains(out, want) {
-						t.Errorf("make lint output lacks %q\n%s", want, out)
-					}
-				}
-			})
+			t.Run(stack+"/fail", func(t *testing.T) { failFixture(t, stackDir) })
+		}
+	}
+}
+
+// prepared is prepare plus the stack's setup commands, when it has any.
+func prepared(t *testing.T, stackDir, kind string) string {
+	t.Helper()
+	dir := prepare(t, filepath.Join(stackDir, kind))
+	if setup, err := os.ReadFile(filepath.Join(stackDir, "setup")); err == nil {
+		must(t, dir, "sh", "-ec", string(setup))
+	}
+	return dir
+}
+
+func passFixture(t *testing.T, stackDir string) {
+	t.Helper()
+	dir := prepared(t, stackDir, "pass")
+	must(t, dir, "make", "fmt-check", "lint", "test")
+	if os.Getenv("PAWL_E2E_CHECK") == "1" {
+		must(t, dir, "git", "add", "-A")
+		must(t, dir, pawlBin(), "baseline")
+		must(t, dir, pawlBin(), "verify")
+	}
+}
+
+func failFixture(t *testing.T, stackDir string) {
+	t.Helper()
+	dir := prepared(t, stackDir, "fail")
+	out, err := run(t, dir, "make", "--keep-going", "lint")
+	if err == nil {
+		t.Fatalf("make lint passed on the fail fixture\n%s", out)
+	}
+	expect, err := os.ReadFile(filepath.Join(stackDir, "fail.expect"))
+	if err != nil {
+		return
+	}
+	for _, want := range strings.Split(strings.TrimSpace(string(expect)), "\n") {
+		if want = strings.TrimSpace(want); want != "" && !strings.Contains(out, want) {
+			t.Errorf("make lint output lacks %q\n%s", want, out)
 		}
 	}
 }
@@ -122,12 +132,7 @@ func TestFixtures(t *testing.T) {
 // TestMakeWorksWithoutPawl prepares the Go pass fixture with the real pawl, then runs the rings with PAWL pointing
 // nowhere: each target passes and names what it skipped, and PAWL_REQUIRED=1 turns the missing pawl into a failure.
 func TestMakeWorksWithoutPawl(t *testing.T) {
-	dir := prepare(t, "../fixtures/go/pass")
-	setup, err := os.ReadFile("../fixtures/go/setup")
-	if err != nil {
-		t.Fatal(err)
-	}
-	must(t, dir, "sh", "-ec", string(setup))
+	dir := prepared(t, "../fixtures/go", "pass")
 	must(t, dir, "make", "lint")
 	must(t, dir, "git", "add", "-A")
 	must(t, dir, pawlBin(), "baseline")

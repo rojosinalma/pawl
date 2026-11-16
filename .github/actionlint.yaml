@@ -2,3 +2,9 @@
 self-hosted-runner:
   labels: []
 config-variables: null
+# actionlint 1.7.12 does not know GitHub's self-repository syntax (`uses: $/`, July 2026), which zizmor asks for:
+# https://docs.zizmor.sh/audits/#self-repository. Remove this when actionlint accepts it.
+paths:
+  .github/workflows/e2e.yml:
+    ignore:
+      - 'specifying action "\$/" in invalid format'

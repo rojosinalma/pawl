@@ -24,7 +24,7 @@ runs:
       shell: bash
       env:
         PAWL_VERSION: ${{ inputs.version }}
-      run: |
+      run: | # zizmor: ignore[github-env] -- the directory comes from mktemp under RUNNER_TEMP; no input reaches the path
         set -euo pipefail
         # RUNNER_OS and RUNNER_ARCH are set by the runner; the release has Linux and macOS archives for amd64 and arm64.
         case "${RUNNER_OS}" in

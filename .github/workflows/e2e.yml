@@ -35,7 +35,7 @@ jobs:
         run: make e2e TOOLBOX_IMAGE=pawl-toolbox:ci
 
   # A fresh project without the toolbox, both ways: the tools from the generated mise.toml through mise-action and
-  # `make check`; or `pawl install` (which brings mise and the tools) and `pawl check`.
+  # `make check`; or `pawl install` (which brings mise, make and the tools) and `pawl run check`.
   fresh:
     name: fresh project, ${{ matrix.way }}
     runs-on: ubuntu-latest
@@ -45,7 +45,7 @@ jobs:
         include:
           - way: mise and make
             target: e2e-project-check
-          - way: pawl install and pawl check
+          - way: pawl install and pawl run check
             target: e2e-project-pawl
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -74,11 +74,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      # the action of this commit, by the self-repository syntax: no checkout, nothing a step could have changed
       - id: pawl
-        uses: ./
+        uses: $/
         with:
           version: latest
       - name: pawl is on the PATH and reports the version the action output

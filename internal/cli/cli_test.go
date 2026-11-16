@@ -23,7 +23,7 @@ func goRepo(t *testing.T) string {
 func pawl(t *testing.T, root string, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	code = Execute("test", append([]string{"-C", root}, args...), &out, &errOut)
+	code = Execute(Build{Version: "test"}, append([]string{"-C", root}, args...), &out, &errOut)
 	return out.String(), errOut.String(), code
 }
 
@@ -305,5 +305,21 @@ func TestInitNamesTheNextCommands(t *testing.T) {
 	out, stderr, code := pawl(t, goRepo(t), "init")
 	if code != 0 || !strings.Contains(out, "next: `pawl install` (make and mise when missing, the pinned tools), `pawl run lint`, `pawl baseline` (records the debt of today), `pawl run check`, then commit.") {
 		t.Errorf("init (%d): %s%s", code, out, stderr)
+	}
+}
+
+func TestInitPinsTheSetupActionOfAReleaseBuild(t *testing.T) {
+	root := goRepo(t)
+	commit := strings.Repeat("0123456789abcdef", 3)[:40]
+	var out, errOut bytes.Buffer
+	if code := Execute(Build{Version: "v1.2.3", Commit: commit}, []string{"-C", root, "init"}, &out, &errOut); code != 0 {
+		t.Fatalf("init failed (%d): %s%s", code, out.String(), errOut.String())
+	}
+	raw, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "check.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "uses: rojosinalma/pawl@" + commit + " # v1.2.3"; !strings.Contains(string(raw), want) {
+		t.Errorf("check.yml lacks %q:\n%s", want, raw)
 	}
 }

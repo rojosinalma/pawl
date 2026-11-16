@@ -188,8 +188,8 @@ manifest.
 | tool configurations (`.golangci.yml`, `biome.jsonc`, `.rubocop.yml`, `ruff.toml`, `pyrightconfig.json`, `.shellcheckrc`, `.editorconfig`, `.hadolint.yaml`, `.github/actionlint.yaml`, `.github/zizmor.yml`, `clippy.toml`, `.gitleaks.toml`, `.jscpd.json`, `.typos.toml`) | project | written only when missing |
 | `.pawl/sgconfig.yml`, `.pawl/rules/*.yml` | pawl, refreshed by `pawl rules sync` when unedited | the ast-grep pack, templated with `config_module` and `own_module` |
 | `.pawl/baseline.json` | project, through `pawl baseline` | the ratchet |
-| `.githooks/pre-commit` | project | `pawl run precommit` (`make precommit`, timed) |
-| `.github/workflows/check.yml`, `nightly.yml`, `review.yml` | project | the rings; `review.yml` is `workflow_dispatch` only, off by default |
+| `.githooks/pre-commit` | project | `pawl run precommit` (`make precommit`, timed); plain `make precommit` when pawl is missing |
+| `.github/workflows/check.yml`, `nightly.yml`, `review.yml` | project | the rings, with the "Set up Pawl" action pinned and `PAWL_REQUIRED=1`; `review.yml` is `workflow_dispatch` only, off by default |
 | `AGENTS.md` | project; one marked block is pawl's | the review checklist from the waived rules, and the three commands an agent needs |
 | `.gitignore` | project | `.pawl/reports/`, `AGENTS.local.md` |
 
@@ -234,6 +234,12 @@ manifest.
     linked into `~/.local/bin`. Every other tool is mise's business.
 16. `drift.pr-size` is skipped on the base branch (`main` for `origin/main`): commits there are not a pull request.
 17. `pawl run` takes any make target; only the three rings are timed for `pawl budget`.
+18. CI gets Pawl through the action of this repository (`action.yml`, "Set up Pawl"): it downloads the release
+    binary, checks it against the release's `checksums.txt` and puts it on the PATH. The workflows `pawl init`
+    writes pin the action to the commit the running pawl was built from (`uses: rojosinalma/pawl@<sha> # vX.Y.Z`),
+    so Dependabot keeps every project current; a build without that commit (a development build, `go install`)
+    writes a verified download step instead. The checksum file comes from the same release: it catches a corrupt
+    download, not a compromised release.
 
 ## Known limits
 
@@ -248,3 +254,5 @@ manifest.
    documented surface is, which layers exist) that no default can supply.
 6. A directive inside a multi-line string literal is counted as a suppression; the string check works per line.
 7. Linux and macOS only. The generated recipes and the hook are POSIX shell.
+8. Go: a package whose files all carry a build tag stops golangci-lint ("build constraints exclude all Go
+   files") when one of its files is staged or linted; list the tag under `run.build-tags` in `.golangci.yml`.

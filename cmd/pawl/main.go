@@ -9,8 +9,11 @@ import (
 	"github.com/rojosinalma/pawl/internal/cli"
 )
 
-// version is set by the release build (-ldflags "-X main.version=...").
-var version = "dev"
+// version and commit are set by the release build (-ldflags "-X main.version=... -X main.commit=...").
+var (
+	version = "dev"
+	commit  = ""
+)
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -20,5 +23,5 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if info, ok := debug.ReadBuildInfo(); ok {
 		module = info.Main.Version
 	}
-	return cli.Execute(cli.ResolveVersion(version, module), args, stdout, stderr)
+	return cli.Execute(cli.Build{Version: cli.ResolveVersion(version, module), Commit: commit}, args, stdout, stderr)
 }

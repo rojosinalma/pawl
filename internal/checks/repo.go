@@ -211,7 +211,8 @@ func usesFinding(file string, n *node) []report.Finding {
 	}
 	ref := strings.TrimSpace(n.Value)
 	switch {
-	case ref == "", strings.HasPrefix(ref, "./"):
+	// an action of this repository, by the workspace path or by GitHub's self-repository syntax, has no pin to check
+	case ref == "", strings.HasPrefix(ref, "./"), strings.HasPrefix(ref, "$/"):
 		return nil
 	case strings.HasPrefix(ref, "docker://"):
 		if strings.Contains(ref, "@sha256:") {

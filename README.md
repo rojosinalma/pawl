@@ -69,6 +69,13 @@ make check       # the merge gate: lint, tests, `pawl verify`
 Every `make` target works without Pawl installed. The calls to `pawl` are skipped with a warning, and `make test`
 runs every test. `PAWL_REQUIRED=1`, which the generated CI workflows set, turns a missing Pawl into an error.
 
+In CI, the generated workflows install Pawl with the action of this repository, pinned to a commit so Dependabot
+can keep it current:
+
+```yaml
+- uses: rojosinalma/pawl@<commit sha> # v0.3.0
+```
+
 `pawl run <target>` runs any `make` target (`lint`, `fmt`, `test`, a single `lint-<tool>`) with the pinned tools on
 PATH, so a shell without mise activated still works.
 

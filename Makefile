@@ -22,6 +22,7 @@ MUTATION_SCORE ?= 80
 SH_FILES := $(shell git ls-files -co --exclude-standard | grep -vE '$(PAWL_EXCLUDE)' | xargs -r shfmt -f 2>/dev/null)
 DOCKERFILES := $(shell git ls-files -co --exclude-standard | grep -vE '$(PAWL_EXCLUDE)' | grep -E '(^|/)(Dockerfile(\..*)?|Containerfile|.*\.dockerfile)$$')
 WORKFLOWS := $(wildcard .github/workflows/*.yml .github/workflows/*.yaml)
+ACTIONS := $(wildcard action.yml action.yaml .github/actions/*/action.yml .github/actions/*/action.yaml)
 BATS_FILES := $(filter %.bats,$(SH_FILES))
 STAGED_SH := $(filter $(SH_FILES),$(STAGED))
 
@@ -75,7 +76,7 @@ lint-actionlint:  ## one step of lint
 	@[ -z "$(WORKFLOWS)" ] || actionlint $(WORKFLOWS)
 
 lint-zizmor:  ## one step of lint
-	@[ -z "$(WORKFLOWS)" ] || zizmor --no-progress --min-severity low .github/workflows
+	@[ -z "$(WORKFLOWS)$(ACTIONS)" ] || zizmor --no-progress --min-severity low $(if $(WORKFLOWS),.github/workflows) $(ACTIONS)
 
 lint-docker-user:  ## one step of lint
 	@s=0; for f in $(DOCKERFILES); do grep -qiE '^[[:space:]]*USER[[:space:]]' "$$f" || { echo "$$f: no USER instruction, the container runs as root (docker-user)"; s=1; }; done; exit $$s

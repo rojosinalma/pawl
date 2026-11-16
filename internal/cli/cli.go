@@ -41,12 +41,18 @@ var ringNames = []string{string(catalog.Precommit), string(catalog.Check), strin
 // errCheckRemoved is what the removed `pawl check` says: the gate and the verification each have one command now.
 var errCheckRemoved = errors.New(`pawl check was removed: run "pawl run check" (the gate, through make) or "pawl verify" (the verification)`)
 
+// Build identifies the pawl that runs: what `--version` prints and what the generated workflows pin.
+type Build struct {
+	Version string // the release tag, the module version of a `go install`, or "dev"
+	Commit  string // the full commit SHA of a release build, else ""
+}
+
 // Execute runs the command line and returns the exit code.
-func Execute(version string, args []string, stdout, stderr io.Writer) int {
+func Execute(build Build, args []string, stdout, stderr io.Writer) int {
 	// a cancelled context stops the ring or the install that is running, so Ctrl-C does not leave make behind
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	root := newRoot(version, stdout, stderr)
+	root := newRoot(build, stdout, stderr)
 	root.SetArgs(args)
 	if err := root.ExecuteContext(ctx); err != nil {
 		if !errors.Is(err, errFindings) {
@@ -61,16 +67,17 @@ func Execute(version string, args []string, stdout, stderr io.Writer) int {
 type app struct {
 	dir     string
 	version string
+	commit  string
 	stdout  io.Writer
 	stderr  io.Writer
 }
 
-func newRoot(version string, stdout, stderr io.Writer) *cobra.Command {
-	a := &app{version: version, stdout: stdout, stderr: stderr}
+func newRoot(build Build, stdout, stderr io.Writer) *cobra.Command {
+	a := &app{version: build.Version, commit: build.Commit, stdout: stdout, stderr: stderr}
 	root := &cobra.Command{
 		Use:           "pawl",
 		Short:         "Make a repository's own tooling enforce a quality catalog, one way only",
-		Version:       version,
+		Version:       build.Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -105,7 +112,7 @@ func (a *app) initCmd() *cobra.Command {
 		Short: "Write the manifest, the missing tool configurations, the make targets, the hook and the workflows",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			res, err := scaffold.Init(a.dir, scaffold.Options{Stacks: stacks, DryRun: dry, Version: a.version})
+			res, err := scaffold.Init(a.dir, scaffold.Options{Stacks: stacks, DryRun: dry, Version: a.version, Commit: a.commit})
 			if err != nil {
 				return err
 			}

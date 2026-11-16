@@ -4,6 +4,7 @@ package shell
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/rojosinalma/pawl/internal/stack"
 )
@@ -32,6 +33,9 @@ func (Adapter) Title() string { return "Shell, Docker and GitHub Actions" }
 var scriptGlobs = []string{"**/*.sh", "**/*.bash", "bin/*", "scripts/*", ".githooks/*"}
 var dockerGlobs = []string{"**/Dockerfile", "**/Dockerfile.*", "**/*.dockerfile", "**/Containerfile"}
 var workflowGlobs = []string{".github/workflows/*.yml", ".github/workflows/*.yaml"}
+
+// actionGlobs are the composite actions of the repository: the one at the root and those under .github/actions.
+var actionGlobs = []string{"action.yml", "action.yaml", ".github/actions/*/action.yml", ".github/actions/*/action.yaml"}
 
 // Detect implements stack.Adapter.
 func (Adapter) Detect(files []string) bool {
@@ -71,7 +75,7 @@ func (Adapter) Suppressions() []stack.Suppression {
 	return []stack.Suppression{
 		{Kind: "shellcheck-disable", Pattern: regexp.MustCompile(`shellcheck\s+disable=[\w,]+(?:\s*(?:--|#)\s*(?P<reason>.+))?`), Globs: scriptGlobs},
 		{Kind: "hadolint-ignore", Pattern: regexp.MustCompile(`hadolint\s+ignore=[\w,]+(?:\s*(?:--|#)\s*(?P<reason>.+))?`), Globs: dockerGlobs},
-		{Kind: "zizmor-ignore", Pattern: regexp.MustCompile(`zizmor:\s*ignore\[[\w-]+\](?:\s*(?:--|#)\s*(?P<reason>.+))?`), Globs: workflowGlobs},
+		{Kind: "zizmor-ignore", Pattern: regexp.MustCompile(`zizmor:\s*ignore\[[\w-]+\](?:\s*(?:--|#)\s*(?P<reason>.+))?`), Globs: append(append([]string{}, workflowGlobs...), actionGlobs...)},
 	}
 }
 
@@ -139,6 +143,7 @@ func (Adapter) Make(stack.Params) stack.Make {
 			"SH_FILES := " + find,
 			"DOCKERFILES := $(shell git ls-files -co --exclude-standard | grep -vE '$(PAWL_EXCLUDE)' | grep -E '(^|/)(Dockerfile(\\..*)?|Containerfile|.*\\.dockerfile)$$')",
 			"WORKFLOWS := $(wildcard .github/workflows/*.yml .github/workflows/*.yaml)",
+			"ACTIONS := $(wildcard " + strings.Join(actionGlobs, " ") + ")",
 			"BATS_FILES := $(filter %.bats,$(SH_FILES))",
 			"STAGED_SH := $(filter $(SH_FILES),$(STAGED))",
 		},
@@ -148,7 +153,7 @@ func (Adapter) Make(stack.Params) stack.Make {
 			`@[ -z "$(SH_FILES)" ] || shellcheck $(SH_FILES)`,
 			`@[ -z "$(DOCKERFILES)" ] || hadolint $(DOCKERFILES)`,
 			`@[ -z "$(WORKFLOWS)" ] || actionlint $(WORKFLOWS)`,
-			`@[ -z "$(WORKFLOWS)" ] || zizmor --no-progress --min-severity low .github/workflows`,
+			`@[ -z "$(WORKFLOWS)$(ACTIONS)" ] || zizmor --no-progress --min-severity low $(if $(WORKFLOWS),.github/workflows) $(ACTIONS)`,
 			dockerUser,
 		},
 		StepNames: map[string]string{dockerUser: "docker-user"},

@@ -5,7 +5,7 @@
     "code.file-size": 0,
     "code.todo-links": 0,
     "escape.duplication": 1,
-    "escape.suppressions": 2,
+    "escape.suppressions": 3,
     "tests.quarantine": 0
   },
   "offenders": {
@@ -13,8 +13,21 @@
       ".github/workflows/check.yml ~ .github/workflows/nightly.yml"
     ],
     "escape.suppressions": [
+      "action.yml zizmor-ignore",
       "internal/stack/common/rules/bounded-growth.yml.tmpl ast-grep-ignore",
       "toolbox/Dockerfile hadolint-ignore"
     ]
-  }
+  },
+  "growth": [
+    {
+      "date": "2026-11-16",
+      "reason": "action.yml writes its mktemp directory to GITHUB_PATH; zizmor accepts only a literal path there",
+      "from": {
+        "escape.suppressions": 2
+      },
+      "to": {
+        "escape.suppressions": 3
+      }
+    }
+  ]
 }
