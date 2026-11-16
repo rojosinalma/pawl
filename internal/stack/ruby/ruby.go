@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -97,21 +98,34 @@ func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 	return out
 }
 
-// GemfileAdditions returns the development and test group pawl appends to a Gemfile that lacks RuboCop.
+// GemfileAdditions returns the development and test group pawl appends to a Gemfile that lacks RuboCop. The gems
+// are in alphabetical order, which RuboCop's Bundler/OrderedGems asks for.
 func GemfileAdditions(framework string) string {
-	plugin, version := "rubocop-minitest", RubocopMinitestVersion
-	if framework == "rspec" {
-		plugin, version = "rubocop-rspec", RubocopRspecVersion
+	gems := map[string]string{
+		"bundler-audit":       BundlerAuditVersion,
+		"rubocop":             RubocopVersion,
+		"rubocop-performance": RubocopPerformanceVersion,
+		"simplecov":           SimplecovVersion,
+		"simplecov-lcov":      SimplecovLcovVersion,
 	}
-	return "\n# pawl: the quality tools of this project, pinned here (the stack's native pin)\n" +
-		"group :development, :test do\n" +
-		"  gem 'rubocop', '" + RubocopVersion + "', require: false\n" +
-		"  gem 'rubocop-performance', '" + RubocopPerformanceVersion + "', require: false\n" +
-		"  gem '" + plugin + "', '" + version + "', require: false\n" +
-		"  gem 'bundler-audit', '" + BundlerAuditVersion + "', require: false\n" +
-		"  gem 'simplecov', '" + SimplecovVersion + "', require: false\n" +
-		"  gem 'simplecov-lcov', '" + SimplecovLcovVersion + "', require: false\n" +
-		"end\n"
+	if framework == "rspec" {
+		gems["rubocop-rspec"] = RubocopRspecVersion
+	} else {
+		gems["rubocop-minitest"] = RubocopMinitestVersion
+	}
+	names := make([]string, 0, len(gems))
+	for name := range gems {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	b.WriteString("\n# pawl: the quality tools of this project, pinned here (the stack's native pin)\n")
+	b.WriteString("group :development, :test do\n")
+	for _, name := range names {
+		b.WriteString("  gem '" + name + "', '" + gems[name] + "', require: false\n")
+	}
+	b.WriteString("end\n")
+	return b.String()
 }
 
 func (Adapter) Rules(p stack.Params) map[string]stack.Enforcement {
