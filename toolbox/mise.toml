@@ -1,0 +1,58 @@
+# Tool versions of the pawl toolbox image: every tool the six stack adapters name, so any project pawl set up can run
+# its rings in one container. Exact versions here; mise.lock adds the URL and checksum per platform.
+# Regenerate the lock with `make toolbox-lock` after an edit.
+
+[settings]
+lockfile = true
+experimental = false
+
+[tools]
+# runtimes
+go = "1.25.14"
+node = "24.22.2"
+bun = "1.4.4"
+python = "3.13.18"
+uv = "0.13.8"
+ruby = "3.4.12"
+rust = { version = "1.100.0", components = "clippy,rustfmt,llvm-tools-preview" }
+
+# every stack
+ast-grep = "0.51.2"
+"npm:jscpd" = "5.4.3"
+typos = "1.52.2"
+gitleaks = "8.30.1"
+"pypi:diff-cover" = "11.0.2"
+
+# Go
+golangci-lint = "2.15.0"
+"github:go-gremlins/gremlins" = "0.6.0"
+
+# TypeScript / JavaScript
+biome = "2.6.8"
+oxlint = "1.93.0"
+"npm:knip" = "6.45.1"
+"npm:dependency-cruiser" = "18.7.2"
+
+# Python
+ruff = "0.17.5"
+"npm:pyright" = "1.1.414"
+"pypi:vulture" = "2.16"
+"pypi:deptry" = "0.25.1"
+"pypi:pip-audit" = "2.10.1"
+"pypi:mutmut" = "3.8.1"
+"pypi:import-linter" = "2.16"
+
+# Shell, Docker, GitHub Actions
+shellcheck = "0.11.0"
+shfmt = "3.14.1"
+hadolint = "2.15.1"
+"aqua:rhysd/actionlint" = "1.7.12"
+zizmor = "1.32.0"
+bats = "1.14.0"
+
+# Rust
+"aqua:rustsec/rustsec/cargo-audit" = "0.23.0"
+cargo-deny = "0.20.2"
+"github:bnjbvr/cargo-machete" = "0.10.0"
+"aqua:taiki-e/cargo-llvm-cov" = "0.9.1"
+"github:sourcefrog/cargo-mutants" = "27.1.0"

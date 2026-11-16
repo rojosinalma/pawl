@@ -1,0 +1,63 @@
+# GoReleaser configuration: static binaries for Linux and macOS, checksums, a GitHub release and the Homebrew cask.
+version: 2
+project_name: pawl
+
+before:
+  hooks:
+    - go mod tidy -diff
+
+builds:
+  - id: pawl
+    main: ./cmd/pawl
+    binary: pawl
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Tag }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: pawl
+    formats: [tar.gz]
+    # pawl_<version>_<os>_<arch>.tar.gz, plus pawl_<os>_<arch>.tar.gz for a stable "latest" URL
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "^chore:"]
+
+release:
+  github:
+    owner: rojosinalma
+    name: pawl
+  extra_files:
+    - glob: ./dist/latest/*.tar.gz
+
+homebrew_casks:
+  - name: pawl
+    binaries: [pawl]
+    homepage: https://github.com/rojosinalma/pawl
+    description: Make a repository's own tooling enforce a quality catalog, one way only
+    license: MIT
+    commit_msg_template: "pawl {{ .Tag }}"
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/pawl"]
+          end
+    repository:
+      owner: rojosinalma
+      name: homebrew-tap
+      branch: main
+      git:
+        url: ssh://git@github.com/rojosinalma/homebrew-tap.git
+        private_key: "{{ .Env.TAP_DEPLOY_KEY }}"

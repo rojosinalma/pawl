@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -47,13 +48,15 @@ func run(dir string, args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
-// Files returns the paths git tracks or does not ignore, relative to the root, sorted as git lists them.
+// Files returns the paths git tracks or does not ignore, relative to the root, sorted.
 func (r *Repo) Files() ([]string, error) {
 	out, err := run(r.Root, "ls-files", "-co", "--exclude-standard", "-z")
 	if err != nil {
 		return nil, err
 	}
-	return splitZ(out, r.Root, true), nil
+	files := splitZ(out, r.Root, true)
+	sort.Strings(files)
+	return files, nil
 }
 
 // Tracked returns the tracked paths only.

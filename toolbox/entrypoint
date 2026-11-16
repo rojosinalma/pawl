@@ -1,0 +1,22 @@
+#!/bin/sh
+# Entrypoint of the pawl toolbox image: put the pinned tools on PATH, give any UID a writable home, run the command.
+# HOME, the XDG directories, GOCACHE, GOPATH, CARGO_HOME and the tool caches come from the image's ENV.
+set -eu
+
+# shellcheck source=/dev/null
+. /toolbox/env.sh
+export PATH
+
+mkdir -p "${HOME}" "${XDG_CACHE_HOME:?}" "${XDG_CONFIG_HOME:?}" "${XDG_DATA_HOME:?}" "${GOCACHE:?}" "${GOPATH:?}" "${CARGO_HOME:?}"
+
+if [ "$#" -eq 0 ] || [ "$1" = "--help" ]; then
+  cat <<'USAGE'
+pawl toolbox: pawl and every tool its stack adapters name, at pinned versions.
+
+usage: docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work <image> make check
+       docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work <image> pawl doctor
+USAGE
+  exit 0
+fi
+
+exec "$@"

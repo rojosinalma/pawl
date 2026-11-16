@@ -1,0 +1,23 @@
+# Dependabot keeps the Go modules, the workflow actions and the toolbox base images current.
+# The tool versions in mise.toml and toolbox/mise.toml are outside Dependabot's reach: bump them by hand, then
+# `make toolbox-lock`.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-modules:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /toolbox
+    schedule:
+      interval: weekly
