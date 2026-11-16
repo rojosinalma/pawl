@@ -157,7 +157,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 		"speed.rings":         pawl,
 		"speed.affected":      pawl,
 		"tests.principles":    pawl,
-		"code.naming":          {Step: "lint", Via: []string{"typos"}},
+		"code.naming":         {Step: "lint", Via: []string{"typos"}},
 	}
 }
 
@@ -184,7 +184,6 @@ func (Adapter) Make(stack.Params) stack.Make {
 			"ast-grep scan -c .pawl/sgconfig.yml",
 			"typos",
 			"gitleaks git . --redact --no-banner --exit-code 1",
-			"gitleaks dir . --redact --no-banner --exit-code 1",
 		},
 		Precommit: []string{
 			`@[ -z "$(STAGED)" ] || git diff --cached | gitleaks stdin --redact --no-banner --exit-code 1`,

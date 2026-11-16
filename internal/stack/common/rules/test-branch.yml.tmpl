@@ -7,7 +7,14 @@ message: Production code branches on the test environment. Inject the behaviour 
 rule:
   any:
     - pattern: testing.Testing()
-    - pattern: flag.Lookup("test.v")
+    - all:
+        - kind: call_expression
+        - has: {field: function, regex: '^flag\.Lookup$'}
+        - has: {field: arguments, regex: '"test\.'}
+    - all:
+        - kind: call_expression
+        - has: {field: function, regex: '^strings\.(HasSuffix|Contains)$'}
+        - has: {field: arguments, regex: 'os\.Args\[0\]'}
 files: ["**/*.go"]
 ignores: ["**/*_test.go"{{range .TestDirs}}, "{{.}}/**"{{end}}]
 ---

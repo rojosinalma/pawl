@@ -1,0 +1,13 @@
+File is not properly formatted (goimports)
+(errcheck)
+(nilerr)
+(forbidigo)
+(gocognit)
+var-naming: func parameter userId should be userID (revive)
+(exhaustive)
+(noctx)
+(gosec)
+error[config-owner-go]
+error[bounded-growth-go]
+error[skip-without-reason-go]
+error[test-branch-go]

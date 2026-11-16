@@ -4,17 +4,20 @@ language: Go
 severity: error
 message: t.Skip without a reason hides a test; use t.Skip("reason") or t.Skipf.
 rule:
-  any:
-    - pattern: $T.Skip()
-    - pattern: $T.SkipNow()
+  kind: call_expression
+  all:
+    - has: {field: function, regex: '\.(Skip|SkipNow)$'}
+    - has: {field: arguments, regex: '^\(\s*\)$'}
 files: ["**/*_test.go"]
 ---
 id: skip-without-reason-rs
 language: Rust
 severity: error
 message: '#[ignore] without a reason hides a test; use #[ignore = "reason"].'
+# the pattern "#[ignore]" also matches #[ignore = "reason"], so the rule compares the attribute text
 rule:
-  pattern: "#[ignore]"
+  kind: attribute_item
+  regex: '^#\[\s*ignore\s*\]$'
 files: ["**/*.rs"]
 ---
 id: skip-without-reason-py

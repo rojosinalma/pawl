@@ -3,13 +3,15 @@ id: shell-strict-mode
 language: Bash
 severity: error
 message: The script does not set strict mode; add `set -euo pipefail` after the shebang.
+# strict mode is a `set` command with errexit (-e or -o errexit) and pipefail, in any spelling (-Eeuo, -o ...)
 rule:
   kind: program
   not:
     has:
-      any:
-        - pattern: set -euo pipefail
-        - pattern: set -eu -o pipefail
-        - pattern: set -o errexit
       stopBy: end
+      kind: command
+      all:
+        - regex: '^set\s'
+        - regex: '\s-[a-zA-Z]*e|errexit'
+        - regex: 'pipefail'
 files: ["**/*.sh", "**/*.bash"]

@@ -1,0 +1,4 @@
+# the Go tools the coverage and audit targets run with `go tool`, pinned in go.mod as the project would
+go get -tool golang.org/x/vuln/cmd/govulncheck@v1.7.0
+go get -tool github.com/jandelgado/gcov2lcov@v1.1.1
+go mod tidy

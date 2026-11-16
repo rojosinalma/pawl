@@ -1,0 +1,9 @@
+[package]
+name = "acme-greeter"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Builds greetings for named people."
+
+[dependencies]
