@@ -3,6 +3,7 @@
 package doctor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/rojosinalma/pawl/internal/report"
 	"github.com/rojosinalma/pawl/internal/runner"
 	"github.com/rojosinalma/pawl/internal/stack"
+	"github.com/rojosinalma/pawl/internal/toolenv"
 )
 
 const (
@@ -44,13 +46,23 @@ type result struct {
 }
 
 // Run checks the tools of every active adapter (missing tool for the precommit or check ring: error; nightly-only:
-// warning; version differs from the pin: error), make, git, the hook path, and gh (warning when absent).
+// warning; version differs from the pin: error), make, git, the hook path, and gh (warning when absent). The tools
+// are found and run in the tool environment, so the ones mise installed count without mise being activated.
 func Run(p *project.Project) (*report.Report, error) {
-	return run(p, runner.Exec{Timeout: toolTimeout, IsCombined: true}, config.Verbose())
+	env, err := toolenv.Environ(context.Background(), p.Root)
+	if err != nil {
+		return nil, err
+	}
+	return run(p, toolenv.Exec{Env: env, Timeout: toolTimeout, IsCombined: true}, config.Verbose(), toolenv.MisePath())
 }
 
-func run(p *project.Project, r runner.Runner, verbose bool) (*report.Report, error) {
+// run checks with r; mise is the mise binary, "" when the machine has none.
+func run(p *project.Project, r runner.Runner, verbose bool, mise string) (*report.Report, error) {
 	rep := &report.Report{Checked: []string{rulePinned, ruleHook}}
+	if mise == "" && toolenv.HasConfig(p.Root) {
+		rep.Add(report.Warnf(rulePinned, "", 0, "mise is not installed; `pawl install` installs it and the pinned tools").
+			WithFix("pawl install"))
+	}
 	for _, res := range checkAll(p.Root, items(p), r, verbose) {
 		if res.finding != nil {
 			rep.Add(*res.finding)

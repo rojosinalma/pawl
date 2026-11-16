@@ -2,6 +2,8 @@ package scaffold
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/rojosinalma/pawl/internal/project"
@@ -41,7 +43,7 @@ func addRuby(p *project.Project, w *writer) error {
 	if err := w.appendTo("Gemfile", header, ruby.GemfileAdditions(p.Params.Facts["test_framework"])); err != nil {
 		return err
 	}
-	w.res.Hints = append(w.res.Hints, "run: bundle install")
+	w.hint(rubyStep())
 	return nil
 }
 
@@ -56,11 +58,12 @@ func addPython(p *project.Project, w *writer) error {
 	if err := w.appendTo("pyproject.toml", "", python.DevDependencies); err != nil {
 		return err
 	}
-	hint := "run: pip install --group dev (pip 25.1 or later)"
-	if p.Params.Facts["uv"] == "true" {
-		hint = "run: uv sync"
+	step := pythonStep(p, existing)
+	if step.Command[0] == "pip" {
+		w.res.Hints = append(w.res.Hints, "run: "+strings.Join(step.Command, " ")+" (pip 25.1 or later)")
+		return nil
 	}
-	w.res.Hints = append(w.res.Hints, hint)
+	w.hint(step)
 	return nil
 }
 
@@ -70,6 +73,88 @@ func addGo(_ *project.Project, w *writer) error {
 	if err != nil || !ok {
 		return err
 	}
+	if step, ok := goStep(gomod); ok {
+		w.hint(step)
+	}
+	return nil
+}
+
+// addTypeScript hints the dev packages package.json lacks; a package.json that does not parse gets no hint, the
+// stack's own tools report it.
+func addTypeScript(p *project.Project, w *writer) error {
+	raw, ok, err := w.read("package.json")
+	if err != nil || !ok {
+		return err
+	}
+	if missing, ok := missingPackages(raw, tsDevPackages); !ok || len(missing) == 0 {
+		return nil
+	}
+	step, _ := typeScriptStep(p, raw)
+	w.hint(step)
+	return nil
+}
+
+func addRust(_ *project.Project, w *writer) error {
+	w.hint(rustStep())
+	return nil
+}
+
+// hint records the step as a command the project still has to run.
+func (w *writer) hint(s SetupStep) {
+	w.res.Hints = append(w.res.Hints, "run: "+strings.Join(s.Command, " "))
+}
+
+// SetupStep is a command the project's stack needs once after init or a fresh clone.
+type SetupStep struct {
+	Name    string   // "go tools", "gems", "python packages", "node packages", "rust components"
+	Command []string // argv
+}
+
+// SetupSteps lists the stack-native commands the project needs, in adapter order: the Go tools go.mod lacks, the
+// gems, the Python dev group, the node packages (added when package.json lacks pawl's, else installed from the
+// lockfile) and the Rust components. A stack whose manifest file (go.mod, Gemfile, pyproject.toml, package.json) is
+// missing has no step.
+func SetupSteps(p *project.Project) []SetupStep {
+	var out []SetupStep
+	for _, a := range p.StackAdapters() {
+		if step, ok := setupStep(p, a.Name()); ok {
+			out = append(out, step)
+		}
+	}
+	return out
+}
+
+// setupStep is the step of one stack; ok is false when it has none.
+func setupStep(p *project.Project, stackName string) (SetupStep, bool) {
+	read := func(rel string) (string, bool) {
+		raw, err := os.ReadFile(filepath.Join(p.Root, rel))
+		return string(raw), err == nil
+	}
+	switch stackName {
+	case "go":
+		if gomod, ok := read("go.mod"); ok {
+			return goStep(gomod)
+		}
+	case "ruby":
+		if _, ok := read("Gemfile"); ok {
+			return rubyStep(), true
+		}
+	case "python":
+		if pyproject, ok := read("pyproject.toml"); ok {
+			return pythonStep(p, pyproject), true
+		}
+	case "typescript":
+		if raw, ok := read("package.json"); ok {
+			return typeScriptStep(p, raw)
+		}
+	case "rust":
+		return rustStep(), true
+	}
+	return SetupStep{}, false
+}
+
+// goStep adds the tools pawl's Go targets run when go.mod lacks them.
+func goStep(gomod string) (SetupStep, bool) {
 	var missing []string
 	for _, mod := range []string{golang.GovulncheckModule, golang.Gcov2lcovModule} {
 		pkg, _, _ := strings.Cut(mod, "@")
@@ -77,33 +162,48 @@ func addGo(_ *project.Project, w *writer) error {
 			missing = append(missing, mod)
 		}
 	}
-	if len(missing) > 0 {
-		w.res.Hints = append(w.res.Hints, "run: go get -tool "+strings.Join(missing, " "))
+	if len(missing) == 0 {
+		return SetupStep{}, false
 	}
-	return nil
+	return SetupStep{Name: "go tools", Command: append([]string{"go", "get", "-tool"}, missing...)}, true
 }
 
-func addTypeScript(p *project.Project, w *writer) error {
-	raw, ok, err := w.read("package.json")
-	if err != nil || !ok {
-		return err
+func rubyStep() SetupStep {
+	return SetupStep{Name: "gems", Command: []string{"bundle", "install"}}
+}
+
+// pythonStep installs the dev group with uv in a uv project (a uv.lock or a [tool.uv] section), else with pip.
+func pythonStep(p *project.Project, pyproject string) SetupStep {
+	if p.Params.Facts["uv"] == "true" || strings.Contains(pyproject, "[tool.uv") {
+		return SetupStep{Name: "python packages", Command: []string{"uv", "sync"}}
 	}
-	// a package.json that does not parse gets no hint; the stack's own tools report it
+	return SetupStep{Name: "python packages", Command: []string{"pip", "install", "--group", "dev"}}
+}
+
+// typeScriptStep adds the dev packages package.json lacks, or installs the locked packages when it has them all;
+// ok is false when package.json does not parse.
+func typeScriptStep(p *project.Project, raw string) (SetupStep, bool) {
 	missing, ok := missingPackages(raw, tsDevPackages)
-	if !ok || len(missing) == 0 {
-		return nil
+	if !ok {
+		return SetupStep{}, false
 	}
-	install := "bun add -d "
-	if p.Params.Facts["runtime"] != "bun" {
-		install = "npm install -D "
+	isBun := p.Params.Facts["runtime"] == "bun"
+	var cmd []string
+	switch {
+	case len(missing) > 0 && isBun:
+		cmd = append([]string{"bun", "add", "-d"}, missing...)
+	case len(missing) > 0:
+		cmd = append([]string{"npm", "install", "-D"}, missing...)
+	case isBun:
+		cmd = []string{"bun", "install", "--frozen-lockfile"}
+	default:
+		cmd = []string{"npm", "ci"}
 	}
-	w.res.Hints = append(w.res.Hints, "run: "+install+strings.Join(missing, " "))
-	return nil
+	return SetupStep{Name: "node packages", Command: cmd}, true
 }
 
-func addRust(_ *project.Project, w *writer) error {
-	w.res.Hints = append(w.res.Hints, "run: rustup component add clippy rustfmt llvm-tools-preview")
-	return nil
+func rustStep() SetupStep {
+	return SetupStep{Name: "rust components", Command: []string{"rustup", "component", "add", "clippy", "rustfmt", "llvm-tools-preview"}}
 }
 
 // missingPackages lists the names package.json declares in neither dependencies nor devDependencies; ok is false

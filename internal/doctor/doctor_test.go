@@ -91,7 +91,7 @@ func TestDoctorMissingAndMismatch(t *testing.T) {
 	replies := baseReplies()
 	delete(replies, "gh --version")
 	replies["golangci-lint version --short"] = reply{out: "2.14.0\n"}
-	r, err := run(p, &fakeRunner{replies: replies}, false)
+	r, err := run(p, &fakeRunner{replies: replies}, false, "/usr/bin/mise")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestDoctorHealthyVerbose(t *testing.T) {
 	replies["go version"] = reply{out: "go version go1.25.14 linux/amd64\n"}
 	replies["golangci-lint version --short"] = reply{out: "2.15.0\n"}
 	replies["gremlins --version"] = reply{out: "gremlins version 0.6.0\n"}
-	r, err := run(p, &fakeRunner{replies: replies}, true)
+	r, err := run(p, &fakeRunner{replies: replies}, true, "/usr/bin/mise")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestDoctorHealthyVerbose(t *testing.T) {
 	if !strings.Contains(got, "note repo.pinned go 1.25.14") || !strings.Contains(got, "note repo.pinned golangci-lint 2.15.0") || r.Failed() {
 		t.Fatalf("got\n%s", got)
 	}
-	r, _ = run(p, &fakeRunner{replies: replies}, false)
+	r, _ = run(p, &fakeRunner{replies: replies}, false, "/usr/bin/mise")
 	if len(r.Findings) != 0 {
 		t.Fatalf("quiet run has findings: %v", messages(r))
 	}
@@ -144,7 +144,7 @@ func TestDoctorFailingCheckCommand(t *testing.T) {
 	replies := baseReplies()
 	replies["cargo clippy --version"] = reply{out: "error: no such command: `clippy`\n", err: errors.New("exit status 101")}
 	replies["weird"] = reply{err: errors.New("exit status 2")}
-	r, _ := run(p, &fakeRunner{replies: replies}, false)
+	r, _ := run(p, &fakeRunner{replies: replies}, false, "/usr/bin/mise")
 	got := strings.Join(messages(r), "\n")
 	want := "error repo.pinned cargo-clippy: `cargo clippy --version` failed: error: no such command: `clippy`\n" +
 		"warning repo.pinned weird: `weird` failed: exit status 2"
@@ -163,7 +163,7 @@ func TestDoctorBound(t *testing.T) {
 	}
 	p := &project.Project{Root: t.TempDir(), Adapters: []stack.Adapter{fakeAdapter{tools: list}}}
 	fr := &fakeRunner{replies: baseReplies()}
-	r, _ := run(p, fr, false)
+	r, _ := run(p, fr, false, "/usr/bin/mise")
 	if fr.peak.Load() > parallel {
 		t.Fatalf("peak %d > %d", fr.peak.Load(), parallel)
 	}
@@ -229,5 +229,62 @@ func TestRunRealExec(t *testing.T) {
 	}
 	if _, err := (runner.Exec{Timeout: time.Second, IsCombined: true}).Output(root, "git", "no-such-command"); err == nil {
 		t.Fatal("want error")
+	}
+}
+
+// writeScript writes an executable shell script at dir/name.
+func writeScript(t *testing.T, dir, name, body string) {
+	t.Helper()
+	testrepo.Write(t, dir, name, "#!/bin/sh\n"+body+"\n")
+	if err := os.Chmod(filepath.Join(dir, name), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMiseNotInstalled(t *testing.T) {
+	p := newProject(t)
+	replies := baseReplies()
+	for _, k := range []string{"go version", "golangci-lint version --short", "gremlins --version"} {
+		replies[k] = reply{out: "2.15.0 0.6.0"}
+	}
+	const warning = "warning repo.pinned mise is not installed; `pawl install` installs it and the pinned tools"
+	r, _ := run(p, &fakeRunner{replies: replies}, false, "")
+	if strings.Contains(strings.Join(messages(r), "\n"), warning) {
+		t.Error("no mise config, no warning")
+	}
+	if err := os.WriteFile(filepath.Join(p.Root, "mise.toml"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = run(p, &fakeRunner{replies: replies}, false, "")
+	if got := strings.Join(messages(r), "\n"); !strings.Contains(got, warning) {
+		t.Errorf("findings:\n%s", got)
+	}
+	r, _ = run(p, &fakeRunner{replies: replies}, false, "/usr/bin/mise")
+	if strings.Contains(strings.Join(messages(r), "\n"), warning) {
+		t.Error("mise is there")
+	}
+}
+
+// TestToolsFromTheToolEnvironment: a tool only mise's bin-paths know is found and passes its pin.
+func TestToolsFromTheToolEnvironment(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "mise.toml"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tools, bin := t.TempDir(), t.TempDir()
+	writeScript(t, tools, "pinnedtool", "echo pinnedtool 1.2.3")
+	writeScript(t, bin, "mise", "echo "+tools)
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("HOME", t.TempDir())
+	tool := stack.Tool{Name: "pinnedtool", Version: "1.2.3", Check: []string{"pinnedtool", "--version"}, Rings: []string{"check"}}
+	p := &project.Project{Root: root, Adapters: []stack.Adapter{fakeAdapter{tools: []stack.Tool{tool}}}}
+	r, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range messages(r) {
+		if strings.Contains(m, "pinnedtool") || strings.Contains(m, "mise is not installed") {
+			t.Errorf("finding: %s", m)
+		}
 	}
 }

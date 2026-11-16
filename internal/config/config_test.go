@@ -24,3 +24,28 @@ func TestValuesAreRead(t *testing.T) {
 		t.Error("only 1 turns the full run on")
 	}
 }
+
+func TestProcessEnvironment(t *testing.T) {
+	t.Setenv("PATH", "/a:/b")
+	t.Setenv("HOME", "/home/someone")
+	if Path() != "/a:/b" {
+		t.Errorf("Path = %q", Path())
+	}
+	if home, err := Home(); err != nil || home != "/home/someone" {
+		t.Errorf("Home = %q, %v", home, err)
+	}
+	found := false
+	for _, kv := range Environ() {
+		found = found || kv == "PATH=/a:/b"
+	}
+	if !found {
+		t.Error("Environ lacks PATH")
+	}
+}
+
+func TestHomeUnset(t *testing.T) {
+	t.Setenv("HOME", "")
+	if _, err := Home(); err == nil {
+		t.Error("want an error without HOME")
+	}
+}
