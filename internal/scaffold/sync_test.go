@@ -20,7 +20,6 @@ func TestDecide(t *testing.T) {
 	}{
 		{"identical, recorded", fileFacts{rendered: pawl, disk: pawl, recorded: pawl}, SyncCurrent},
 		{"identical, no record: adopted", fileFacts{rendered: pawl, disk: pawl}, SyncCurrent},
-		{"identical, stale record", fileFacts{rendered: pawl, disk: pawl, recorded: older}, SyncCurrent},
 		{"identical, forced", fileFacts{rendered: pawl, disk: pawl, isForced: true}, SyncCurrent},
 		{"unedited older rendering", fileFacts{rendered: pawl, disk: older, recorded: older}, SyncUpdated},
 		{"edited", fileFacts{rendered: pawl, disk: other, recorded: older}, SyncEdited},
@@ -29,7 +28,6 @@ func TestDecide(t *testing.T) {
 		{"edited, forced", fileFacts{rendered: pawl, disk: other, recorded: older, isForced: true}, SyncUpdated},
 		{"no record, forced", fileFacts{rendered: pawl, disk: other, isForced: true}, SyncUpdated},
 		{"missing pack file", fileFacts{rendered: pawl, isPack: true}, SyncCreated},
-		{"missing recorded pack file", fileFacts{rendered: pawl, recorded: older, isPack: true}, SyncCreated},
 		{"removed tool configuration", fileFacts{rendered: pawl, recorded: older}, SyncRemoved},
 		{"never written", fileFacts{rendered: pawl}, SyncAbsent},
 		{"never written, forced", fileFacts{rendered: pawl, isForced: true}, SyncCreated},

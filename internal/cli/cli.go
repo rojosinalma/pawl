@@ -500,17 +500,11 @@ func (a *app) rulesSyncCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Bring the rule files Pawl wrote up to date where nobody edited them, and the AGENTS.md block",
-		Long: `Renders every rule file Pawl writes (the tool configurations and the .pawl/ ast-grep pack) from pawl.toml
-and compares each with the file on disk and with .pawl/generated.json, the record of what Pawl wrote:
-
-  updated   the file is the one Pawl recorded writing: it gets this version's rendering
-  created   a missing file of the .pawl/ pack (or one named with --force)
-  kept      the file was edited, or Pawl has no record of writing it: it stays as it is
-  kept      (removed) Pawl wrote it and the project deleted it: it stays deleted
-
-One edit makes the whole file the project's. --force <path> takes Pawl's version of that file anyway; repeat it
-for more files. Paths are relative to the project root. Tool versions are not part of it: mise.toml pins them.
-The Pawl block of AGENTS.md is refreshed from the manifest's waived rules.`,
+		Long: `Renders every rule file Pawl writes (the tool configurations and the .pawl/ ast-grep pack) from pawl.toml.
+A file nobody edited since Pawl wrote it (.pawl/generated.json records that) gets this version's rendering. One edit
+makes the whole file the project's: it is kept and listed. A missing .pawl/ file is recreated; a deleted tool
+configuration stays deleted. --force <path> (repeatable, relative to the project root) takes Pawl's version anyway.
+Tool versions are not part of it: mise.toml pins them. The Pawl block of AGENTS.md is refreshed too.`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			p, err := project.Load(a.dir)
@@ -535,7 +529,7 @@ The Pawl block of AGENTS.md is refreshed from the manifest's waived rules.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringArrayVar(&opts.Force, "force", nil, "take Pawl's version of this file even when it was edited (repeatable)")
+	cmd.Flags().StringArrayVar(&opts.Force, "force", nil, "take Pawl's version of the file at `path` even when it was edited (repeatable)")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "print what would change, write nothing")
 	return cmd
 }

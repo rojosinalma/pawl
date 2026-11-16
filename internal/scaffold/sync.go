@@ -165,27 +165,3 @@ func diskHash(root, rel string) (string, error) {
 	}
 	return hashOf(raw), nil
 }
-
-// SyncAgents rewrites pawl's block in AGENTS.md from the manifest's waived rules; it reports whether it changed
-// (dry: whether it would).
-func SyncAgents(p *project.Project, dry bool) (bool, error) {
-	path := filepath.Join(p.Root, agentsFile)
-	raw, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("read %s: %w", agentsFile, err)
-	}
-	content, err := agentsContent(p, string(raw), err == nil)
-	if err != nil {
-		return false, err
-	}
-	if content == string(raw) {
-		return false, nil
-	}
-	if dry {
-		return true, nil
-	}
-	if err := writeFile(p.Root, agentsFile, content, 0o644); err != nil {
-		return false, fmt.Errorf("sync agents: %w", err)
-	}
-	return true, nil
-}
