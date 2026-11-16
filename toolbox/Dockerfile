@@ -3,6 +3,7 @@
 # toolbox/mise.lock. Build from the repository root: docker build -f toolbox/Dockerfile -t pawl-toolbox .
 
 ARG MISE_IMAGE=ghcr.io/jdx/mise:2026.11.2-debian@sha256:84bb97455fe918f3b805520f9a7b1fd3060085a4ccc757a3ab17fa2e946df46e
+ARG BASE_IMAGE=debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 ARG GO_IMAGE=golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437
 
 FROM ${GO_IMAGE} AS pawl
@@ -27,7 +28,8 @@ RUN mise install --locked \
     && mise env -s bash | grep -E '^export PATH=' | sed 's#/mise/shims:##' > /toolbox/env.sh \
     && mise cache clear
 
-FROM ${MISE_IMAGE}
+# The runtime image carries the installed tools, not mise itself.
+FROM ${BASE_IMAGE}
 ARG PAWL_VERSION=dev
 LABEL org.opencontainers.image.title="pawl toolbox" \
       org.opencontainers.image.description="pawl and the pinned tools of its stack adapters" \
@@ -37,7 +39,7 @@ LABEL org.opencontainers.image.title="pawl toolbox" \
 # A compiler and linker for native gems, Go's race detector and Rust; make and git for the rings.
 # hadolint ignore=DL3008
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential ca-certificates git libssl-dev libyaml-dev make pkg-config xz-utils zlib1g-dev \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates curl git libssl-dev libyaml-dev make pkg-config xz-utils zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=tools /mise /mise
 COPY --from=tools /opt/rustup /opt/rustup

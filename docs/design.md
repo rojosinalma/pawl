@@ -86,10 +86,15 @@ via = ["gofmt", "goimports"]
 waived = "Ruby has no type checker in this project; Steep is an opt-in"
 ```
 
-Each rule has exactly one of `step` (a make target reachable from `make check`, with optional `via`: the tool and rule
-that implement it) or `waived` (a reason). `pawl check` verifies: the manifest lists every catalog rule; every step is
-a make target; every `via` with a known verifier is really enabled in the tool's configuration (a `.golangci.yml` that
-disables `errcheck` fails `code.dropped-results` unless the rule is waived); every waiver has a reason.
+Each rule has exactly one of `step` (a make target reachable from `make check` or `make nightly`, with optional `via`:
+the tools and rules that implement it) or `waived` (a reason). In a project with several stacks a rule is enforced
+when any stack enforces it; the stacks without a tool for it are listed as `gaps`, each with its reason, so a partial
+enforcement is never presented as a whole one.
+
+`pawl check` verifies: the manifest lists every catalog rule; every step is a make target; every `via` with a known
+verifier is really enabled in the tool's configuration (a `.golangci.yml` that disables `errcheck` fails
+`code.dropped-results` unless the rule is waived or the project names another tool in `via`); every waiver has a
+reason.
 
 ## The ratchet
 
@@ -192,9 +197,11 @@ manifest.
 3. ast-grep for patterns (one binary, YAML rules, MIT). Semgrep's registry rules are licensed for internal use only,
    which an open-source tool cannot depend on.
 4. Each stack's native complexity tool; no meta-linter. jscpd for duplication because no native linter does it.
-5. Pins live in each stack's native file; `doctor` reads them. mise is optional glue; the toolbox image
-   (`ghcr.io/rojosinalma/pawl-toolbox`) is an optional artifact built from the same pins for CI and machines without
-   the tools.
+5. The runtime of a stack is pinned in the stack's native file (`go.mod`, `.ruby-version`, `rust-toolchain.toml`).
+   The tools without a native pin (linters shipped as binaries, the cross-stack tools) are pinned in `mise.toml`,
+   which `pawl init` writes and `mise install` installs; `pawl doctor` compares what is installed with the pins.
+   The toolbox image (`ghcr.io/rojosinalma/pawl-toolbox`) is an optional artifact with every adapter's tools, for
+   CI and for machines without them.
 6. Shrink-only baseline compared with the base commit, stale baselines fail: the ratchet is strict in both directions.
 7. No retries anywhere. A flaky test goes on a quarantine list in the manifest with an issue link, and that list is a
    ratchet metric.
@@ -204,3 +211,7 @@ manifest.
     setup excluded; target warns, limit fails.
 11. The merge queue is a repository setting. The generated check workflow triggers on `merge_group` so a queue works
     where the repository has one.
+12. `pawl init` never overwrites: a file that exists is kept, a Makefile gains only missing targets, an existing
+    `core.hooksPath` stays. What the existing configuration does not enforce shows up in `pawl check`.
+13. This repository's own dependencies are kept current by Dependabot (Go modules, actions, the toolbox base images).
+    Dependabot does not read `mise.toml`; those pins are bumped by hand and re-locked.
