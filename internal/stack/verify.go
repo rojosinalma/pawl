@@ -253,14 +253,22 @@ func (v Verify) load() (*Config, *report.Finding) {
 	return cfg, nil
 }
 
-// NotEqual reports when the value at path equals one of the forbidden values (the ways to turn a rule off).
-func NotEqual(file string, format Format, path string, forbidden ...any) func(Verify) []report.Finding {
+// withConfig returns a check that parses file and hands the configuration to inspect; a missing or unparsable file
+// is the check's only finding, so each declarative check states just its own condition.
+func withConfig(file string, format Format, inspect func(v Verify, cfg *Config) []report.Finding) func(Verify) []report.Finding {
 	return func(v Verify) []report.Finding {
 		v.File, v.Format = file, format
 		cfg, f := v.load()
 		if f != nil {
 			return []report.Finding{*f}
 		}
+		return inspect(v, cfg)
+	}
+}
+
+// NotEqual reports when the value at path equals one of the forbidden values (the ways to turn a rule off).
+func NotEqual(file string, format Format, path string, forbidden ...any) func(Verify) []report.Finding {
+	return withConfig(file, format, func(v Verify, cfg *Config) []report.Finding {
 		val, ok := cfg.Get(path)
 		if !ok {
 			return nil
@@ -271,53 +279,38 @@ func NotEqual(file string, format Format, path string, forbidden ...any) func(Ve
 			}
 		}
 		return nil
-	}
+	})
 }
 
 // Equal reports when the value at path is missing or differs from want.
 func Equal(file string, format Format, path string, want any) func(Verify) []report.Finding {
-	return func(v Verify) []report.Finding {
-		v.File, v.Format = file, format
-		cfg, f := v.load()
-		if f != nil {
-			return []report.Finding{*f}
-		}
+	return withConfig(file, format, func(v Verify, cfg *Config) []report.Finding {
 		val, ok := cfg.Get(path)
 		if !ok || fmt.Sprint(val) != fmt.Sprint(want) {
 			return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s must be %v for %s (found %v)", path, want, v.Via, val).WithFix("set it, or waive the rule in pawl.toml with a reason")}
 		}
 		return nil
-	}
+	})
 }
 
 // Has reports when the list at path lacks item, unless the value at absentOK path makes it implied.
 func Has(file string, format Format, path, item string) func(Verify) []report.Finding {
-	return func(v Verify) []report.Finding {
-		v.File, v.Format = file, format
-		cfg, f := v.load()
-		if f != nil {
-			return []report.Finding{*f}
-		}
+	return withConfig(file, format, func(v Verify, cfg *Config) []report.Finding {
 		if !cfg.Contains(path, item) {
 			return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s must list %q for %s", path, item, v.Via).WithFix("add it, or waive the rule in pawl.toml with a reason")}
 		}
 		return nil
-	}
+	})
 }
 
 // Lacks reports when the list at path contains item (a disabled rule, for example).
 func Lacks(file string, format Format, path, item string) func(Verify) []report.Finding {
-	return func(v Verify) []report.Finding {
-		v.File, v.Format = file, format
-		cfg, f := v.load()
-		if f != nil {
-			return []report.Finding{*f}
-		}
+	return withConfig(file, format, func(v Verify, cfg *Config) []report.Finding {
 		if cfg.Contains(path, item) {
 			return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s lists %q, which turns %s off", path, item, v.Via).WithFix("remove it, or waive the rule in pawl.toml with a reason")}
 		}
 		return nil
-	}
+	})
 }
 
 // Matches reports when the file does not contain the regular expression (for configs without structure).
