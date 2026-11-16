@@ -4,12 +4,14 @@ package typescript
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/rojosinalma/pawl/internal/report"
 	"github.com/rojosinalma/pawl/internal/stack"
 	"github.com/rojosinalma/pawl/internal/stack/common"
 )
@@ -88,12 +90,12 @@ func (Adapter) Pins() []stack.Pin {
 func (Adapter) Suppressions() []stack.Suppression {
 	globs := []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"}
 	return []stack.Suppression{
-		{Kind: "biome-ignore", Pattern: regexp.MustCompile(`biome-ignore\s+[\w/.-]+(?::\s*(?P<reason>.+))?`), Globs: globs},
+		{Kind: "biome-ignore", Pattern: regexp.MustCompile(`biome-ignore(?:-all|-start)?\s+[\w/.-]+(?:\([^)]*\))?(?::\s*(?P<reason>.+))?`), Globs: globs},
 		{Kind: "ts-ignore", Pattern: regexp.MustCompile(`@ts-ignore(?:\s*(?:--|:)?\s*(?P<reason>.+))?`), Globs: globs},
 		{Kind: "ts-expect-error", Pattern: regexp.MustCompile(`@ts-expect-error(?:\s*(?:--|:)?\s*(?P<reason>.+))?`), Globs: globs},
 		{Kind: "eslint-disable", Pattern: regexp.MustCompile(`eslint-disable(?:-next-line|-line)?(?:\s+[\w/@,-]+)?(?:\s*--\s*(?P<reason>.+))?`), Globs: globs},
 		{Kind: "oxlint-disable", Pattern: regexp.MustCompile(`oxlint-disable(?:-next-line|-line)?(?:\s+[\w/@,-]+)?(?:\s*--\s*(?P<reason>.+))?`), Globs: globs},
-		{Kind: "as-any", Pattern: regexp.MustCompile(`\bas\s+any\b(?:\s*//\s*(?P<reason>.+))?`), Globs: []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"}},
+		{Kind: "as-any", Pattern: regexp.MustCompile(`\bas\s+any\b[\s;,)\]}]*(?://\s*(?P<reason>.+))?`), Globs: []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"}},
 	}
 }
 
@@ -138,9 +140,9 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 }
 
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
-	f, j := "biome.jsonc", stack.JSONC
+	f, j := biomeFile, stack.JSONC
 	rule := func(id, group, name string) stack.Verifier {
-		return stack.V(id, "biome/"+name, stack.NotEqual(f, j, "linter.rules."+group+"."+name, "off"), stack.NotEqual(f, j, "linter.enabled", false))
+		return stack.V(id, "biome/"+name, biomeRule(group, name), stack.NotEqual(f, j, "linter.enabled", false))
 	}
 	return []stack.Verifier{
 		stack.V("code.format", "biome/format", stack.Exists(f), stack.NotEqual(f, j, "formatter.enabled", false)),
@@ -156,10 +158,60 @@ func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 		rule("tests.smells", "suspicious", "noFocusedTests"),
 		rule("tests.smells", "suspicious", "noSkippedTests"),
 		rule("drift.security", "security", "noGlobalEval"),
-		stack.V("code.dropped-results", "oxlint/no-floating-promises", stack.Equal(".oxlintrc.json", stack.JSONC, "rules.typescript/no-floating-promises", "error"), stack.Equal(".oxlintrc.json", stack.JSONC, "options.typeAware", true)),
-		stack.V("code.dropped-results", "oxlint/no-misused-promises", stack.Equal(".oxlintrc.json", stack.JSONC, "rules.typescript/no-misused-promises", "error")),
+		stack.V("code.dropped-results", "oxlint/no-floating-promises", oxlintRule("typescript/no-floating-promises"), stack.Equal(oxlintFile, stack.JSONC, "options.typeAware", true)),
+		stack.V("code.dropped-results", "oxlint/no-misused-promises", oxlintRule("typescript/no-misused-promises")),
 		stack.V("code.dead", "knip", stack.Exists("knip.json")),
 		rule("resilience.import-cycles", "suspicious", "noImportCycles"),
+	}
+}
+
+const biomeFile = "biome.jsonc"
+
+// biomeRule reports when the Biome rule is missing from biome.jsonc or set to "off" (as a level string or as an
+// object's "level"). The rule must be listed: several of them are outside Biome's recommended preset.
+func biomeRule(group, name string) func(stack.Verify) []report.Finding {
+	return func(v stack.Verify) []report.Finding {
+		cfg, bad := load(v, biomeFile)
+		if bad != nil {
+			return bad
+		}
+		val, ok := cfg.GetKey("linter", "rules", group, name)
+		if obj, isObj := val.(map[string]any); isObj {
+			val = obj["level"]
+		}
+		if !ok || fmt.Sprint(val) == "off" {
+			return []report.Finding{report.Errorf(v.RuleID, biomeFile, 0, "linter.rules.%s.%s is %v, which turns %s off", group, name, val, v.Via).WithFix("set it to \"error\", or waive the rule in pawl.toml with a reason")}
+		}
+		return nil
+	}
+}
+
+// load parses a JSONC configuration; a missing or broken file is a finding.
+func load(v stack.Verify, file string) (*stack.Config, []report.Finding) {
+	cfg, err := stack.LoadConfig(v.Root, file, stack.JSONC)
+	if err != nil {
+		return nil, []report.Finding{report.Errorf(v.RuleID, file, 0, "cannot parse: %v", err)}
+	}
+	if cfg == nil {
+		return nil, []report.Finding{report.Errorf(v.RuleID, file, 0, "missing; %s needs it for %s", v.Via, v.RuleID).WithFix("pawl init writes a default, or waive the rule in pawl.toml")}
+	}
+	return cfg, nil
+}
+
+const oxlintFile = ".oxlintrc.json"
+
+// oxlintRule reports when the oxlint rule is not at "error" (its name has a slash, so the key is read literally).
+func oxlintRule(name string) func(stack.Verify) []report.Finding {
+	return func(v stack.Verify) []report.Finding {
+		cfg, bad := load(v, oxlintFile)
+		if bad != nil {
+			return bad
+		}
+		val, ok := cfg.GetKey("rules", name)
+		if level := fmt.Sprint(val); !ok || (level != "error" && level != "deny") {
+			return []report.Finding{report.Errorf(v.RuleID, oxlintFile, 0, "rules.%s must be \"error\" for %s (found %v)", name, v.Via, val).WithFix("set it, or waive the rule in pawl.toml with a reason")}
+		}
+		return nil
 	}
 }
 

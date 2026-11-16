@@ -254,12 +254,15 @@ func stepNames(prefix string, lines []string) []string {
 // launchers are command words that run another tool; the tool after them names the step.
 var launchers = map[string]bool{"bundle": true, "exec": true, "uv": true, "run": true, "bun": true, "x": true, "npx": true, "env": true}
 
-var nameChars = regexp.MustCompile(`[^a-z0-9-]+`)
+var (
+	nameChars = regexp.MustCompile(`[^a-z0-9-]+`)
+	toolStart = regexp.MustCompile(`^[A-Za-z_./]`) // not a variable, flag, quote or shell operator
+)
 
 // toolName returns the program a recipe line runs: the first word that is not a launcher, variable or assignment.
 func toolName(line string) string {
 	for _, w := range strings.Fields(strings.TrimLeft(line, "@-+")) {
-		if launchers[w] || strings.Contains(w, "=") || strings.HasPrefix(w, "$(") || strings.HasPrefix(w, "-") {
+		if launchers[w] || strings.Contains(w, "=") || !toolStart.MatchString(w) {
 			continue
 		}
 		if name := strings.Trim(nameChars.ReplaceAllString(strings.ToLower(filepath.Base(w)), "-"), "-"); name != "" {

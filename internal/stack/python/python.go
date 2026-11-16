@@ -172,23 +172,26 @@ func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 		stack.V("code.types", "pyright/strict", stack.Equal("pyrightconfig.json", stack.JSONC, "typeCheckingMode", "strict")),
 		selected("code.complexity", "C901"),
 		stack.V("code.complexity", "ruff/C901", stack.Equal(f, t, prefix+".mccabe.max-complexity", p.Complexity)),
-		selected("code.dropped-results", "RUF"),
-		selected("code.dropped-results", "B"),
-		selected("code.swallowed-errors", "BLE"),
-		selected("code.swallowed-errors", "S"),
-		selected("code.swallowed-errors", "E"),
-		selected("code.debug-leftovers", "T20"),
-		selected("code.debug-leftovers", "ERA"),
-		selected("code.debug-leftovers", "TD"),
+		selected("code.dropped-results", "RUF006"),
+		selected("code.dropped-results", "B015"),
+		selected("code.dropped-results", "B018"),
+		selected("code.swallowed-errors", "BLE001"),
+		selected("code.swallowed-errors", "S110"),
+		selected("code.swallowed-errors", "E722"),
+		selected("code.debug-leftovers", "T201"),
+		selected("code.debug-leftovers", "ERA001"),
+		selected("code.debug-leftovers", "TD003"),
 		selected("code.naming", "N"),
 		selected("tests.smells", "PT"),
 		selected("drift.security", "S"),
-		stack.V("resilience.exhaustive", "pyright/reportMatchNotExhaustive", stack.Equal("pyrightconfig.json", stack.JSONC, "typeCheckingMode", "strict")),
+		stack.V("resilience.exhaustive", "pyright/reportMatchNotExhaustive", stack.Equal("pyrightconfig.json", stack.JSONC, "typeCheckingMode", "strict"),
+			stack.NotEqual("pyrightconfig.json", stack.JSONC, "reportMatchNotExhaustive", "none", false, "warning", "information")),
 	}
 }
 
-// ruffSelects reports when the ruff selection lacks the code (as itself or as a prefix such as "S" for "S110") or
-// ignores it.
+// ruffSelects reports when the ruff selection lacks the code (itself, or a selector covering it such as "S" or "S1"
+// for "S110") or an ignore entry turns it off (a selector covering it, or a code of the family when the code is a
+// whole family such as "N").
 func ruffSelects(file string, format stack.Format, prefix, code string) func(stack.Verify) []report.Finding {
 	return func(v stack.Verify) []report.Finding {
 		v.File, v.Format = file, format
@@ -196,10 +199,9 @@ func ruffSelects(file string, format stack.Format, prefix, code string) func(sta
 		if err != nil || cfg == nil {
 			return nil // Exists() reports the missing file
 		}
-		selectedList := append(list(cfg, prefix+".select"), list(cfg, prefix+".extend-select")...)
 		ok := false
-		for _, s := range selectedList {
-			if s == "ALL" || strings.HasPrefix(code, s) {
+		for _, s := range append(list(cfg, prefix+".select"), list(cfg, prefix+".extend-select")...) {
+			if covers(s, code) {
 				ok = true
 			}
 		}
@@ -207,12 +209,27 @@ func ruffSelects(file string, format stack.Format, prefix, code string) func(sta
 			return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s.select must include %q for %s", prefix, code, v.Via).WithFix("add it, or waive the rule in pawl.toml with a reason")}
 		}
 		for _, ig := range append(list(cfg, prefix+".ignore"), list(cfg, prefix+".extend-ignore")...) {
-			if strings.HasPrefix(code, ig) || strings.HasPrefix(ig, code) {
+			if covers(ig, code) || covers(code, ig) {
 				return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s.ignore lists %q, which turns %s off", prefix, ig, v.Via).WithFix("remove it, or waive the rule in pawl.toml with a reason")}
 			}
 		}
 		return nil
 	}
+}
+
+var ruffCode = regexp.MustCompile(`^([A-Z]+)([0-9]*)$`)
+
+// covers reports whether the Ruff selector ("ALL", a linter such as "B", or a code prefix such as "S1") selects the
+// code: the linter letters must be equal ("B" does not cover "BLE001") and the digits must start with the selector's.
+func covers(selector, code string) bool {
+	if selector == "ALL" {
+		return true
+	}
+	s, c := ruffCode.FindStringSubmatch(selector), ruffCode.FindStringSubmatch(code)
+	if s == nil || c == nil {
+		return false
+	}
+	return s[1] == c[1] && strings.HasPrefix(c[2], s[2])
 }
 
 func list(cfg *stack.Config, path string) []string {
