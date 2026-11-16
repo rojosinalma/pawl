@@ -182,6 +182,8 @@ func (Adapter) Make(stack.Params) stack.Make {
 		},
 		Lint: []string{
 			"ast-grep scan -c .pawl/sgconfig.yml",
+			// the duplication report the catalog check reads (.pawl/reports/jscpd-report.json); the ratchet judges it, so exit 0
+			"jscpd --silent --reporters json --output $(REPORTS) .",
 			"typos",
 			"gitleaks git . --redact --no-banner --exit-code 1",
 			"gitleaks dir . --redact --no-banner --exit-code 1",
@@ -192,11 +194,20 @@ func (Adapter) Make(stack.Params) stack.Make {
 	}
 }
 
+// jscpdConfig has no $schema key: jscpd 5 warns about unknown fields.
 const jscpdConfig = `{
-  "$schema": "https://raw.githubusercontent.com/kucherenko/jscpd/master/packages/jscpd/schema.json",
   "minLines": 8,
   "minTokens": 60,
-  "ignore": ["**/node_modules/**", "**/vendor/**", "**/dist/**", "**/.pawl/**", "**/*.lock", "**/*.min.*", "**/testdata/**", "**/fixtures/**"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/vendor/**",
+    "**/dist/**",
+    "**/.pawl/**",
+    "**/*.lock",
+    "**/*.min.*",
+    "**/testdata/**",
+    "**/fixtures/**"
+  ],
   "gitignore": true,
   "absolute": false
 }

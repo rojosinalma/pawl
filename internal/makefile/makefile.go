@@ -177,12 +177,17 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	for _, a := range adapters {
 		frags = append(frags, a.Make(p))
 	}
+	var lintLines []string
+	for _, f := range frags {
+		lintLines = append(lintLines, f.Lint...)
+	}
+	lintSteps := stepNames("lint", lintLines)
 	var b strings.Builder
 	b.WriteString("# Standard targets written by pawl (https://github.com/rojosinalma/pawl). Project-owned: edit freely.\n")
 	b.WriteString("# `make check` is the merge gate; `make precommit` runs from .githooks/pre-commit on staged files.\n")
 	b.WriteString(".DEFAULT_GOAL := check\n")
 	b.WriteString("SHELL := /bin/sh\n")
-	b.WriteString(".PHONY: " + strings.Join(append(append([]string{}, Standard...), Extra...), " ") + "\n\n")
+	b.WriteString(".PHONY: " + strings.Join(append(append(append([]string{}, Standard...), Extra...), lintSteps...), " ") + "\n\n")
 	fmt.Fprintf(&b, "PAWL_BASE ?= %s\n", base)
 	fmt.Fprintf(&b, "DIFF_COVERAGE ?= %d\n", diffCoverage)
 	for _, f := range frags {
@@ -217,7 +222,11 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{"$(PAWL) check"})
 	rule("fmt", "rewrite files with the formatters", nil, collect(func(f stack.Make) []string { return f.Fmt }))
 	rule("fmt-check", "fail when a file is not formatted", nil, collect(func(f stack.Make) []string { return f.FmtCheck }))
-	rule("lint", "every linter, type checker and pattern rule on the whole tree", []string{"fmt-check"}, collect(func(f stack.Make) []string { return f.Lint }))
+	// one target per linter, so `make -k lint` reports every tool's findings instead of stopping at the first
+	rule("lint", "every linter, type checker and pattern rule on the whole tree", append([]string{"fmt-check"}, lintSteps...))
+	for i, name := range lintSteps {
+		rule(name, "lint step", nil, []string{lintLines[i]})
+	}
 	rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, collect(func(f stack.Make) []string { return f.Test }))
 	rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) check --ring precommit"})
 	rule("coverage", "tests with coverage; changed lines must reach DIFF_COVERAGE percent", nil, collect(func(f stack.Make) []string { return f.Coverage }))
@@ -225,6 +234,39 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	rule("mutation", "mutation testing on the change (nightly)", nil, collect(func(f stack.Make) []string { return f.Mutation }))
 	rule("nightly", "everything, including the slow rings", []string{"check", "coverage", "audit", "mutation"}, []string{"$(PAWL) check --ring nightly", "$(PAWL) budget"})
 	return b.String()
+}
+
+// stepNames names one sub-target per recipe line after the tool it runs ("lint-biome"), numbering repeats.
+func stepNames(prefix string, lines []string) []string {
+	seen := map[string]int{}
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		name := prefix + "-" + toolName(l)
+		seen[name]++
+		if n := seen[name]; n > 1 {
+			name = fmt.Sprintf("%s-%d", name, n)
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// launchers are command words that run another tool; the tool after them names the step.
+var launchers = map[string]bool{"bundle": true, "exec": true, "uv": true, "run": true, "bun": true, "x": true, "npx": true, "env": true}
+
+var nameChars = regexp.MustCompile(`[^a-z0-9-]+`)
+
+// toolName returns the program a recipe line runs: the first word that is not a launcher, variable or assignment.
+func toolName(line string) string {
+	for _, w := range strings.Fields(strings.TrimLeft(line, "@-+")) {
+		if launchers[w] || strings.Contains(w, "=") || strings.HasPrefix(w, "$(") || strings.HasPrefix(w, "-") {
+			continue
+		}
+		if name := strings.Trim(nameChars.ReplaceAllString(strings.ToLower(filepath.Base(w)), "-"), "-"); name != "" {
+			return name
+		}
+	}
+	return "step"
 }
 
 func depString(deps []string) string {
@@ -241,7 +283,7 @@ func Merge(existing string, generated string) string {
 	gen := Parse(generated)
 	var names []string
 	for name := range gen.Targets {
-		if !have.Has(name) {
+		if !have.Has(name) && !onlyFor(name, gen, have) {
 			names = append(names, name)
 		}
 	}
@@ -249,7 +291,8 @@ func Merge(existing string, generated string) string {
 		return existing
 	}
 	order := append(append([]string{}, Standard...), Extra...)
-	sort.Slice(names, func(i, j int) bool { return indexOf(order, names[i]) < indexOf(order, names[j]) })
+	sort.Strings(names)
+	sort.SliceStable(names, func(i, j int) bool { return indexOf(order, names[i]) < indexOf(order, names[j]) })
 
 	var b strings.Builder
 	b.WriteString(strings.TrimRight(existing, "\n"))
@@ -277,6 +320,26 @@ func Merge(existing string, generated string) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// onlyFor reports whether name is a generated helper target (not a standard or extra one) that only targets the
+// existing Makefile already has depend on, such as lint-biome when the project keeps its own lint.
+func onlyFor(name string, gen, have *Makefile) bool {
+	if indexOf(Standard, name) < len(Standard) || indexOf(Extra, name) < len(Extra) {
+		return false
+	}
+	needed := false
+	for _, t := range gen.Targets {
+		for _, d := range t.Deps {
+			if d == name {
+				needed = true
+				if !have.Has(t.Name) {
+					return false
+				}
+			}
+		}
+	}
+	return needed
 }
 
 func indexOf(list []string, s string) int {

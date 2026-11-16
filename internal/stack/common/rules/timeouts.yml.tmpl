@@ -2,7 +2,7 @@
 id: fetch-without-timeout-ts
 language: TypeScript
 severity: error
-message: fetch without options has no timeout; pass { signal: AbortSignal.timeout(ms) }.
+message: 'fetch without options has no timeout; pass { signal: AbortSignal.timeout(ms) }.'
 rule:
   pattern: fetch($URL)
 files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.js", "**/*.mjs"]
