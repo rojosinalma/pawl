@@ -11,23 +11,9 @@ import (
 	"github.com/rojosinalma/pawl/internal/catalog"
 	"github.com/rojosinalma/pawl/internal/gitx"
 	"github.com/rojosinalma/pawl/internal/project"
+	"github.com/rojosinalma/pawl/internal/runner"
+	"github.com/rojosinalma/pawl/internal/runner/runnertest"
 )
-
-type reply struct {
-	out string
-	err error
-}
-
-type fakeRunner map[string]reply
-
-func (f fakeRunner) Output(_, name string, args ...string) ([]byte, error) {
-	key := strings.Join(append([]string{name}, args...), " ")
-	r, ok := f[key]
-	if !ok {
-		return nil, fmt.Errorf("unexpected command %q", key)
-	}
-	return []byte(r.out), r.err
-}
 
 const (
 	remoteKey = "git remote get-url origin"
@@ -60,11 +46,11 @@ const failedLog = "check\tSet up job\t2026-11-16T10:00:00.1234567Z Runner versio
 
 func TestStatusFailing(t *testing.T) {
 	p := newProject(t)
-	run := fakeRunner{
-		remoteKey:                      {out: "git@github.com:o/r.git"},
-		prKey:                          {out: failingPR},
-		"gh run view 123 --log-failed": {out: failedLog},
-		"gh run view 126 --log-failed": {err: errors.New("log gone")},
+	run := runnertest.Script{
+		remoteKey:                      {Out: "git@github.com:o/r.git"},
+		prKey:                          {Out: failingPR},
+		"gh run view 123 --log-failed": {Out: failedLog},
+		"gh run view 126 --log-failed": {Err: errors.New("log gone")},
 	}
 	var b strings.Builder
 	failed, err := status(p, &b, run)
@@ -100,7 +86,7 @@ func TestStatusPendingOnly(t *testing.T) {
 	 {"context":"ext","state":"SUCCESS"},
 	 {"context":"ext2","state":"ERROR","targetUrl":"https://ci.example.com"}]}`
 	var b strings.Builder
-	failed, err := status(p, &b, fakeRunner{remoteKey: {out: "x"}, prKey: {out: pr}})
+	failed, err := status(p, &b, runnertest.Script{remoteKey: {Out: "x"}, prKey: {Out: pr}})
 	if err != nil || !failed {
 		t.Fatalf("an errored status context fails: failed=%v err=%v", failed, err)
 	}
@@ -108,12 +94,12 @@ func TestStatusPendingOnly(t *testing.T) {
 		t.Fatalf("output:\n%s", b.String())
 	}
 	b.Reset()
-	failed, err = status(p, &b, fakeRunner{remoteKey: {out: "x"}, prKey: {out: `{"number":9,"url":"u","title":"t","state":"OPEN","statusCheckRollup":[{"name":"check","status":"IN_PROGRESS"}]}`}})
+	failed, err = status(p, &b, runnertest.Script{remoteKey: {Out: "x"}, prKey: {Out: `{"number":9,"url":"u","title":"t","state":"OPEN","statusCheckRollup":[{"name":"check","status":"IN_PROGRESS"}]}`}})
 	if err != nil || failed {
 		t.Fatalf("pending is not failed: failed=%v err=%v", failed, err)
 	}
 	b.Reset()
-	if _, err := status(p, &b, fakeRunner{remoteKey: {out: "x"}, prKey: {out: `{"number":9,"statusCheckRollup":[]}`}}); err != nil || !strings.Contains(b.String(), "no checks") {
+	if _, err := status(p, &b, runnertest.Script{remoteKey: {Out: "x"}, prKey: {Out: `{"number":9,"statusCheckRollup":[]}`}}); err != nil || !strings.Contains(b.String(), "no checks") {
 		t.Fatalf("no checks: %v\n%s", err, b.String())
 	}
 }
@@ -122,13 +108,13 @@ func TestStatusUnavailable(t *testing.T) {
 	cases := []struct {
 		name string
 		repo bool
-		run  fakeRunner
+		run  runnertest.Script
 		want string
 	}{
-		{"no repo", false, fakeRunner{}, "not a git repository"},
-		{"no remote", true, fakeRunner{}, "no origin remote"},
-		{"no gh", true, fakeRunner{remoteKey: {out: "x"}, prKey: {err: fmt.Errorf("gh: %w", exec.ErrNotFound)}}, "gh is not installed"},
-		{"no pr", true, fakeRunner{remoteKey: {out: "x"}, prKey: {err: errors.New("gh pr view: exit status 1: no pull requests found for branch \"x\"")}}, "no pull request for this branch"},
+		{"no repo", false, runnertest.Script{}, "not a git repository"},
+		{"no remote", true, runnertest.Script{}, "no origin remote"},
+		{"no gh", true, runnertest.Script{remoteKey: {Out: "x"}, prKey: {Err: fmt.Errorf("gh: %w", exec.ErrNotFound)}}, "gh is not installed"},
+		{"no pr", true, runnertest.Script{remoteKey: {Out: "x"}, prKey: {Err: errors.New("gh pr view: exit status 1: no pull requests found for branch \"x\"")}}, "no pull request for this branch"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -147,10 +133,10 @@ func TestStatusUnavailable(t *testing.T) {
 
 func TestStatusGhErrors(t *testing.T) {
 	p := newProject(t)
-	if _, err := status(p, &strings.Builder{}, fakeRunner{remoteKey: {out: "x"}, prKey: {err: errors.New("auth required")}}); err == nil {
+	if _, err := status(p, &strings.Builder{}, runnertest.Script{remoteKey: {Out: "x"}, prKey: {Err: errors.New("auth required")}}); err == nil {
 		t.Fatal("want gh error")
 	}
-	if _, err := status(p, &strings.Builder{}, fakeRunner{remoteKey: {out: "x"}, prKey: {out: "{"}}); err == nil {
+	if _, err := status(p, &strings.Builder{}, runnertest.Script{remoteKey: {Out: "x"}, prKey: {Out: "{"}}); err == nil {
 		t.Fatal("want parse error")
 	}
 }
@@ -169,7 +155,7 @@ func TestFirstFindingWithoutLocation(t *testing.T) {
 }
 
 func TestExecRunner(t *testing.T) {
-	run := execRunner{timeout: 10 * time.Second}
+	run := runner.Exec{Timeout: 10 * time.Second}
 	if out, err := run.Output(t.TempDir(), "git", "--version"); err != nil || !strings.HasPrefix(string(out), "git version") {
 		t.Fatalf("%q %v", out, err)
 	}

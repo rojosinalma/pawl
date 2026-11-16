@@ -14,6 +14,7 @@ import (
 	"github.com/rojosinalma/pawl/internal/gitx"
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/report"
+	"github.com/rojosinalma/pawl/internal/runner"
 	"github.com/rojosinalma/pawl/internal/stack"
 )
 
@@ -235,7 +236,7 @@ func TestRunRealExec(t *testing.T) {
 			t.Fatal("git is installed in the test environment")
 		}
 	}
-	if _, err := (execRunner{timeout: time.Second}).Output(root, "git", "no-such-command"); err == nil {
+	if _, err := (runner.Exec{Timeout: time.Second, IsCombined: true}).Output(root, "git", "no-such-command"); err == nil {
 		t.Fatal("want error")
 	}
 }

@@ -1,7 +1,6 @@
 package affected
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,31 +11,17 @@ import (
 	"github.com/rojosinalma/pawl/internal/gitx"
 	"github.com/rojosinalma/pawl/internal/manifest"
 	"github.com/rojosinalma/pawl/internal/project"
+	"github.com/rojosinalma/pawl/internal/runner"
+	"github.com/rojosinalma/pawl/internal/runner/runnertest"
 	"github.com/rojosinalma/pawl/internal/stack"
 )
-
-type reply struct {
-	out string
-	err error
-}
-
-type fakeRunner map[string]reply
-
-func (f fakeRunner) Output(_, name string, args ...string) ([]byte, error) {
-	key := strings.Join(append([]string{name}, args...), " ")
-	r, ok := f[key]
-	if !ok {
-		return nil, fmt.Errorf("unexpected command %q", key)
-	}
-	return []byte(r.out), r.err
-}
 
 func fakeProject(root string, files ...string) *project.Project {
 	m := manifest.Defaults()
 	return &project.Project{Root: root, Manifest: &m, Files: files, Params: stack.Params{Facts: map[string]string{}}}
 }
 
-func decideFor(t *testing.T, p *project.Project, name string, run runner, changed ...string) string {
+func decideFor(t *testing.T, p *project.Project, name string, run runner.Runner, changed ...string) string {
 	t.Helper()
 	st := strategies()[name]
 	return decide(p, st, run, changed, st.everything(p))
@@ -52,7 +37,7 @@ const goList = `{"ImportPath":"ex.com/m","Dir":"/r","Imports":["ex.com/m/interna
 
 func TestGoClosure(t *testing.T) {
 	p := fakeProject("/r")
-	run := fakeRunner{"go list -json ./...": {out: goList}}
+	run := runnertest.Script{"go list -json ./...": {Out: goList}}
 	cases := []struct {
 		changed []string
 		want    string
@@ -73,13 +58,13 @@ func TestGoClosure(t *testing.T) {
 
 func TestGoFailures(t *testing.T) {
 	p := fakeProject("/r")
-	if got := decideFor(t, p, "go", fakeRunner{}, "a.go"); got != "./..." {
+	if got := decideFor(t, p, "go", runnertest.Script{}, "a.go"); got != "./..." {
 		t.Fatalf("go missing: %q", got)
 	}
-	if got := decideFor(t, p, "go", fakeRunner{"go list -json ./...": {out: "{bad"}}, "a.go"); got != "./..." {
+	if got := decideFor(t, p, "go", runnertest.Script{"go list -json ./...": {Out: "{bad"}}, "a.go"); got != "./..." {
 		t.Fatalf("bad json: %q", got)
 	}
-	if got := decideFor(t, p, "go", fakeRunner{"go list -json ./...": {out: `{"ImportPath":"x","Dir":"/elsewhere"}`}}, "a.go"); got != "-run ^$ ./..." {
+	if got := decideFor(t, p, "go", runnertest.Script{"go list -json ./...": {Out: `{"ImportPath":"x","Dir":"/elsewhere"}`}}, "a.go"); got != "-run ^$ ./..." {
 		t.Fatalf("no package: %q", got)
 	}
 }
@@ -93,7 +78,7 @@ const cargoMeta = `{"packages":[
 
 func TestRust(t *testing.T) {
 	p := fakeProject("/r")
-	run := fakeRunner{"cargo metadata --format-version 1 --no-deps": {out: cargoMeta}}
+	run := runnertest.Script{"cargo metadata --format-version 1 --no-deps": {Out: cargoMeta}}
 	cases := []struct {
 		changed []string
 		want    string
@@ -108,14 +93,14 @@ func TestRust(t *testing.T) {
 			t.Errorf("%v: got %q, want %q", tc.changed, got, tc.want)
 		}
 	}
-	single := fakeRunner{"cargo metadata --format-version 1 --no-deps": {out: `{"packages":[{"name":"one","manifest_path":"/r/Cargo.toml"}]}`}}
+	single := runnertest.Script{"cargo metadata --format-version 1 --no-deps": {Out: `{"packages":[{"name":"one","manifest_path":"/r/Cargo.toml"}]}`}}
 	if got := decideFor(t, p, "rust", single, "src/lib.rs"); got != "--workspace" {
 		t.Errorf("single crate: %q", got)
 	}
-	if got := decideFor(t, p, "rust", fakeRunner{}, "src/lib.rs"); got != "--workspace" {
+	if got := decideFor(t, p, "rust", runnertest.Script{}, "src/lib.rs"); got != "--workspace" {
 		t.Errorf("cargo missing: %q", got)
 	}
-	outside := fakeRunner{"cargo metadata --format-version 1 --no-deps": {out: `{"packages":[{"name":"a","manifest_path":"/r/a/Cargo.toml"},{"name":"b","manifest_path":"/r/b/Cargo.toml"}]}`}}
+	outside := runnertest.Script{"cargo metadata --format-version 1 --no-deps": {Out: `{"packages":[{"name":"a","manifest_path":"/r/a/Cargo.toml"},{"name":"b","manifest_path":"/r/b/Cargo.toml"}]}`}}
 	if got := decideFor(t, p, "rust", outside, "xtask/main.rs"); got != "--workspace" {
 		t.Errorf("file outside members: %q", got)
 	}
@@ -176,7 +161,7 @@ func TestGlobalFiles(t *testing.T) {
 	p := fakeProject("/r")
 	for _, f := range []string{"pawl.toml", "Makefile", "sub/GNUmakefile", ".pawl/baseline.json", ".github/workflows/check.yml",
 		"mise.toml", ".tool-versions", "go.sum", "web/package.json", "Gemfile.lock", ".golangci.yml", "pytest.ini"} {
-		if got := decideFor(t, p, "go", fakeRunner{}, "internal/a/a.go", f); got != "./..." {
+		if got := decideFor(t, p, "go", runnertest.Script{}, "internal/a/a.go", f); got != "./..." {
 			t.Errorf("%s: got %q", f, got)
 		}
 	}
@@ -236,7 +221,7 @@ func repoProject(t *testing.T) *project.Project {
 
 func TestScopeInRepo(t *testing.T) {
 	p := repoProject(t)
-	run := execRunner{timeout: 30 * time.Second}
+	run := runner.Exec{Timeout: 30 * time.Second}
 	got, err := scope(p, "python", run)
 	if err != nil || got != "tests/test_new.py" {
 		t.Fatalf("untracked test: %q, %v", got, err)
@@ -258,7 +243,7 @@ func TestScopeInRepo(t *testing.T) {
 func TestScopeEmptyChangeAndNoBase(t *testing.T) {
 	p := repoProject(t)
 	p.Files = []string{"pkg/foo.py", "tests/test_foo.py"}
-	run := execRunner{timeout: 30 * time.Second}
+	run := runner.Exec{Timeout: 30 * time.Second}
 	if got, _ := scope(p, "rust", run); got != "--workspace" {
 		t.Fatalf("empty change: %q", got)
 	}
@@ -267,7 +252,7 @@ func TestScopeEmptyChangeAndNoBase(t *testing.T) {
 		t.Fatalf("no base: %q", got)
 	}
 	p.Manifest.Base = "main"
-	if got, _ := scope(p, "go", fakeRunner{}); got != "./..." {
+	if got, _ := scope(p, "go", runnertest.Script{}); got != "./..." {
 		t.Fatalf("git failure: %q", got)
 	}
 }
@@ -275,7 +260,7 @@ func TestScopeEmptyChangeAndNoBase(t *testing.T) {
 func TestChangesStatusFailure(t *testing.T) {
 	p := repoProject(t)
 	base := p.BaseRef()
-	run := fakeRunner{"git diff --name-only --diff-filter=D -z " + base: {}}
+	run := runnertest.Script{"git diff --name-only --diff-filter=D -z " + base: {}}
 	if _, ok := changes(p, base, run); ok {
 		t.Fatal("want failure when git status fails")
 	}

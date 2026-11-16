@@ -2,8 +2,6 @@
 package ghx
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,32 +12,10 @@ import (
 	"time"
 
 	"github.com/rojosinalma/pawl/internal/project"
+	"github.com/rojosinalma/pawl/internal/runner"
 )
 
 const cmdTimeout = 30 * time.Second
-
-// runner runs an outbound command and returns its standard output.
-type runner interface {
-	Output(dir, name string, args ...string) ([]byte, error)
-}
-
-type execRunner struct{ timeout time.Duration }
-
-// Output runs the command in dir under the runner's timeout and returns its standard output; a failure carries
-// the command line and its standard error.
-func (e execRunner) Output(dir, name string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return out, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
 
 // check is one entry of statusCheckRollup: a CheckRun (name, status, conclusion, detailsUrl) or a StatusContext
 // (context, state, targetUrl).
@@ -74,7 +50,7 @@ var (
 // failure when the log has one, and the command that fixes it. failed is true when a required check failed.
 // Without gh, a remote or a pull request it explains what is missing and returns failed=false, err=nil.
 func Status(p *project.Project, w io.Writer) (failed bool, err error) {
-	return status(p, w, execRunner{timeout: cmdTimeout})
+	return status(p, w, runner.Exec{Timeout: cmdTimeout})
 }
 
 // printer writes lines and keeps the first write error.
@@ -89,7 +65,7 @@ func (o *printer) printf(format string, args ...any) {
 	}
 }
 
-func status(p *project.Project, w io.Writer, run runner) (bool, error) {
+func status(p *project.Project, w io.Writer, run runner.Runner) (bool, error) {
 	pr, why, err := loadPR(p, run)
 	if err != nil {
 		return false, err
@@ -123,13 +99,13 @@ func status(p *project.Project, w io.Writer, run runner) (bool, error) {
 }
 
 // hasOrigin reports whether the repository has an origin remote.
-func hasOrigin(p *project.Project, run runner) bool {
+func hasOrigin(p *project.Project, run runner.Runner) bool {
 	out, err := run.Output(p.Root, "git", "remote", "get-url", "origin")
 	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 
 // loadPR returns the pull request, or why there is none to show, or an error from gh itself.
-func loadPR(p *project.Project, run runner) (*pullRequest, string, error) {
+func loadPR(p *project.Project, run runner.Runner) (*pullRequest, string, error) {
 	if p.Repo == nil {
 		return nil, "not a git repository", nil
 	}
@@ -185,7 +161,7 @@ func isFailure(state string) bool {
 }
 
 // explain prints the first file:line of a failed GitHub Actions check and the commands that help fix it.
-func explain(p *project.Project, o *printer, run runner, c check) {
+func explain(p *project.Project, o *printer, run runner.Runner, c check) {
 	m := runIDPattern.FindStringSubmatch(c.DetailsURL + " " + c.TargetURL)
 	if m == nil {
 		return

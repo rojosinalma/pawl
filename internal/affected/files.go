@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/rojosinalma/pawl/internal/project"
+	"github.com/rojosinalma/pawl/internal/runner"
 	"github.com/rojosinalma/pawl/internal/stack"
 )
 
@@ -34,7 +35,7 @@ func ownedBy(name, file string) bool {
 	return ok && stack.Match(file, a.SourceGlobs())
 }
 
-func (m mapping) affected(p *project.Project, _ runner, changed []string) (string, bool) {
+func (m mapping) affected(p *project.Project, _ runner.Runner, changed []string) (string, bool) {
 	byName := m.testIndex(p.Files)
 	listed := toSet(p.Files)
 	tests := map[string]bool{}

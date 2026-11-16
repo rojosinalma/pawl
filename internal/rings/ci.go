@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/rojosinalma/pawl/internal/project"
+	"github.com/rojosinalma/pawl/internal/runner"
 )
 
 // ciSource reads ring durations from GitHub Actions through gh; it resolves the remote and default branch once.
 type ciSource struct {
 	p        *project.Project
-	run      runner
+	run      runner.Runner
 	resolved bool
 	branch   string
 	why      string // why the CI rings cannot be read; "" when they can
