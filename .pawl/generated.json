@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "files": {
+    ".editorconfig": "sha256:6e2682148776afff97233cb588180f7ed544c3e2f975e467ccac0f7f53dcfeb3",
+    ".github/zizmor.yml": "sha256:7055cada55e4e9bd88603a692eeacaec89c4b103a3569ed7742c7fe94f79cb83",
+    ".gitleaks.toml": "sha256:09da16e68c04ef38b6c74be856ed8c15f2ee8c465001dbf15f3c3bba2f4ce8c7",
+    ".hadolint.yaml": "sha256:4160dc4720ab90bcd99899db8ae7ad6c9a044de7b498901a9b93f41afd3d68e2",
+    ".pawl/rules/bounded-growth.yml": "sha256:ca3dca4cac3c44b641eaf03e876d04bd2e7ed3b8d0142e40fafc1683633306d2",
+    ".pawl/rules/config-owner.yml": "sha256:fa662e653c7e0fb23e76e74a9d47ccac9c636dafde5907a75f59bb70ef2d474d",
+    ".pawl/rules/mock-edges.yml": "sha256:b90cf1c394adfb5fe17ab91047a23f1593cf3ddbe41552828c99ef24a27dd8f0",
+    ".pawl/rules/security.yml": "sha256:2d86f4bd95eefaf4bf5266e8c8444d95ace499c8e1e49a82e23d457cb453e0c7",
+    ".pawl/rules/shell-strict.yml": "sha256:d9453e810e19b38a6c833b5db58031d443a44a66782d15f91ae119822ecd64e8",
+    ".pawl/rules/skip-without-reason.yml": "sha256:c0a8dbae8810b55482160df7af5097860dd8b353f462f4ff366c88fc168a0028",
+    ".pawl/rules/test-branch.yml": "sha256:dcb2fa9ba56c9b207bf5bbca3e3c7c833f5d3738b8b1c079aa921594fb5b3082",
+    ".pawl/rules/timeouts.yml": "sha256:b6ead09253a9f3792595e9846306a8ac06ccd6f54b179d5c83cc0e60c9acae66",
+    ".pawl/sgconfig.yml": "sha256:ba3d8d280ff91ace82b99ca2ad07c2d5f3948427a3d58d26fd2fc4c71f6580a8",
+    ".shellcheckrc": "sha256:ece60c509504002dd2be796a9a0fa2a8c769c077eb477b10178fcf2c0373443e",
+    ".typos.toml": "sha256:c158b174d168444dad9b600b3b01459edd4b1209d4d191342489ed0011301c2d"
+  }
+}
