@@ -121,8 +121,8 @@ pawl: $(PAWL_SOURCES)
 
 build: pawl  ## compile pawl into ./pawl
 
-# the rings run the pawl of this commit
-check precommit nightly: pawl
+# the rings and the tests (their scope comes from `pawl affected`) run the pawl of this commit
+check precommit nightly test: pawl
 
 toolbox:  ## build the toolbox image (pawl plus every adapter's tools)
 	docker build -f toolbox/Dockerfile -t $(TOOLBOX_IMAGE) .
