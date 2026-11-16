@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/rojosinalma/pawl/internal/stack"
+	"github.com/rojosinalma/pawl/internal/stack/stacktest"
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
 
 func params() stack.Params {
@@ -24,41 +26,15 @@ func writeDefaults(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, c := range (Adapter{}).Configs(params()) {
-		write(t, dir, c.Path, c.Content)
+		testrepo.Write(t, dir, c.Path, c.Content)
 	}
-	write(t, dir, "tsconfig.json", tsconfig)
+	testrepo.Write(t, dir, "tsconfig.json", tsconfig)
 	return dir
-}
-
-func write(t *testing.T, dir, rel, content string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, rel), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// edit replaces old with new in dir/rel and fails when old is absent.
-func edit(t *testing.T, dir, rel, old, new string) {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(dir, rel))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(raw), old) {
-		t.Fatalf("%s lacks %q", rel, old)
-	}
-	write(t, dir, rel, strings.Replace(string(raw), old, new, 1))
 }
 
 // findings runs every verifier on dir and returns the rule ids that reported.
 func findings(dir string) map[string][]string {
-	out := map[string][]string{}
-	for _, v := range (Adapter{}).Verifiers(params()) {
-		for _, f := range v.Check(dir) {
-			out[f.RuleID] = append(out[f.RuleID], f.Message)
-		}
-	}
-	return out
+	return stacktest.Findings(dir, (Adapter{}).Verifiers(params()))
 }
 
 func TestDefaultsPassTheirVerifiers(t *testing.T) {
@@ -91,7 +67,7 @@ func TestTurningARuleOffReports(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.rule+"/"+c.new, func(t *testing.T) {
 			dir := writeDefaults(t)
-			edit(t, dir, c.file, c.old, c.new)
+			stacktest.EditFile(t, dir, c.file, c.old, c.new)
 			if got := findings(dir); len(got[c.rule]) == 0 {
 				t.Fatalf("no %s finding after %s; got %v", c.rule, c.new, got)
 			}

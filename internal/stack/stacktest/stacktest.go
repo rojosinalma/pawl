@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/rojosinalma/pawl/internal/stack"
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
 
 // Params are the defaults a fresh pawl.toml carries.
@@ -37,15 +38,33 @@ func Write(t *testing.T, files []stack.ConfigFile, edits map[string]Edit) string
 		if e := edits[c.Path]; e != nil {
 			content = e(t, content)
 		}
-		path := filepath.Join(root, c.Path)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		testrepo.Write(t, root, c.Path, content)
 	}
 	return root
+}
+
+// EditFile replaces the first occurrence of old in root/rel with replacement; the test fails when the file lacks it.
+func EditFile(t *testing.T, root, rel, old, replacement string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(root, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), old) {
+		t.Fatalf("%s lacks %q", rel, old)
+	}
+	testrepo.Write(t, root, rel, strings.Replace(string(raw), old, replacement, 1))
+}
+
+// Findings runs the verifiers on root and returns their messages by rule id.
+func Findings(root string, verifiers []stack.Verifier) map[string][]string {
+	out := map[string][]string{}
+	for _, v := range verifiers {
+		for _, f := range v.Check(root) {
+			out[f.RuleID] = append(out[f.RuleID], f.Message)
+		}
+	}
+	return out
 }
 
 // Failing returns "<rule> <via>" for every verifier that reports on root.
