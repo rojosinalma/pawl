@@ -22,8 +22,12 @@ builds:
 archives:
   - id: pawl
     formats: [tar.gz]
-    # pawl_<version>_<os>_<arch>.tar.gz, plus pawl_<os>_<arch>.tar.gz for a stable "latest" URL
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md]
+  # the same archives without the version in the name, for a stable releases/latest/download URL
+  - id: pawl-latest
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     files: [LICENSE, README.md]
 
 checksum:
@@ -38,11 +42,10 @@ release:
   github:
     owner: rojosinalma
     name: pawl
-  extra_files:
-    - glob: ./dist/latest/*.tar.gz
 
 homebrew_casks:
   - name: pawl
+    ids: [pawl]
     binaries: [pawl]
     homepage: https://github.com/rojosinalma/pawl
     description: Make a repository's own tooling enforce a quality catalog, one way only
