@@ -29,6 +29,8 @@ type Makefile struct {
 	Content string
 	Targets map[string]Target
 	Vars    map[string]string
+	// Defines holds each `define NAME` block, from the define line to endef, by name.
+	Defines map[string]string
 }
 
 // Target is one rule.
@@ -62,7 +64,7 @@ func Read(root string) (*Makefile, bool, error) {
 
 // Parse reads targets and variables from Makefile text. Recipes are the tab-indented lines after a rule.
 func Parse(content string) *Makefile {
-	p := &parser{m: &Makefile{Content: content, Targets: map[string]Target{}, Vars: map[string]string{}}}
+	p := &parser{m: &Makefile{Content: content, Targets: map[string]Target{}, Vars: map[string]string{}, Defines: map[string]string{}}}
 	for i, line := range strings.Split(content, "\n") {
 		p.line(i+1, line)
 	}
@@ -75,9 +77,14 @@ type parser struct {
 	m           *Makefile
 	current     *Target
 	lastComment string
+	define      string          // the name of the define block being read, if any
+	block       strings.Builder // its text so far
 }
 
 func (p *parser) line(n int, line string) {
+	if p.defineLine(line) {
+		return
+	}
 	trimmed := strings.TrimSpace(line)
 	switch {
 	case strings.HasPrefix(line, "\t"):
@@ -101,6 +108,27 @@ func (p *parser) line(n int, line string) {
 	if mt := targetRe.FindStringSubmatch(line); mt != nil {
 		p.target(n, mt[1], mt[2])
 	}
+}
+
+// defineLine reads the lines of a `define` block, whose body is make text and no rule; it reports whether the line
+// belonged to one.
+func (p *parser) defineLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if p.define == "" {
+		name, ok := strings.CutPrefix(trimmed, "define ")
+		if !ok {
+			return false
+		}
+		p.flush()
+		p.define = strings.Fields(name)[0]
+		p.block.Reset()
+	}
+	p.block.WriteString(line + "\n")
+	if trimmed == "endef" {
+		p.m.Defines[p.define] = p.block.String()
+		p.define = ""
+	}
+	return true
 }
 
 // target starts a rule; special targets such as .PHONY are not rules a project runs and are skipped.
@@ -232,6 +260,24 @@ func DryRun(root, target string) (string, error) {
 	return out.String(), nil
 }
 
+// guards are the macros every call to pawl in a generated recipe goes through. They test for pawl when the recipe
+// runs, not when make reads the file: a project may build pawl as a prerequisite of its rings.
+const guards = `# Pawl is optional: every target works without it. Without pawl, $(call pawl_run,<args>) skips ` + "`pawl <args>`" + `
+# with a warning and ` + "`make test`" + ` runs every test; PAWL_REQUIRED=1 (the CI workflows set it) makes that an error.
+# $(call pawl_guard,<command run when pawl is installed>,<what happens instead, for the warning>)
+define pawl_guard
+if command -v $(firstword $(PAWL)) >/dev/null 2>&1; then $(1); elif [ "$(PAWL_REQUIRED)" = 1 ]; then echo "make $@: pawl is not installed and PAWL_REQUIRED=1" >&2; exit 1; else echo "make $@: warning: pawl is not installed; $(2)" >&2; fi
+endef
+pawl_run = $(call pawl_guard,$(PAWL) $(1),skipped: pawl $(1))
+`
+
+// testGuard is the first line of the test recipe: the scope variables already fall back to every test without pawl,
+// and this line says so (or fails under PAWL_REQUIRED=1).
+const testGuard = "@$(call pawl_guard,:,every test runs)"
+
+// PawlRun returns the recipe line that runs `pawl <args>` through the guard macro.
+func PawlRun(args string) string { return "@$(call pawl_run," + args + ")" }
+
 // Generate renders the standard and extra targets from the active adapters.
 func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base string) string {
 	g := &generator{}
@@ -242,7 +288,7 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	lintSteps := stepNames("lint", lintLines, g.stepNames())
 	g.header(lintSteps, p.Exclude, diffCoverage, base)
 
-	g.rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{"$(PAWL) verify"})
+	g.rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{PawlRun("verify")})
 	g.rule("fmt", "rewrite files with the formatters", nil, g.collect(func(f stack.Make) []string { return f.Fmt }))
 	g.rule("fmt-check", "fail when a file is not formatted", nil, g.collect(func(f stack.Make) []string { return f.FmtCheck }))
 	// one target per linter, so `make -k lint` reports every tool's findings instead of stopping at the first
@@ -250,12 +296,12 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	for i, name := range lintSteps {
 		g.rule(name, "one step of lint", nil, []string{lintLines[i]})
 	}
-	g.rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, g.collect(func(f stack.Make) []string { return f.Test }))
-	g.rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, g.collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) verify --ring precommit"})
+	g.rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, []string{testGuard}, g.collect(func(f stack.Make) []string { return f.Test }))
+	g.rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, g.collect(func(f stack.Make) []string { return f.Precommit }), []string{PawlRun("verify --ring precommit")})
 	g.rule("coverage", "tests with coverage; changed lines must reach DIFF_COVERAGE percent", nil, g.collect(func(f stack.Make) []string { return f.Coverage }))
 	g.rule("audit", "dependency vulnerability audits", nil, g.collect(func(f stack.Make) []string { return f.Audit }))
 	g.rule("mutation", "mutation testing on the change (nightly)", nil, g.collect(func(f stack.Make) []string { return f.Mutation }))
-	g.rule("nightly", "everything, including the slow rings", []string{"check", "coverage", "audit", "mutation"}, []string{"$(PAWL) verify --ring nightly", "$(PAWL) budget"})
+	g.rule("nightly", "everything, including the slow rings", []string{"check", "coverage", "audit", "mutation"}, []string{PawlRun("verify --ring nightly"), PawlRun("budget")})
 	return g.b.String()
 }
 
@@ -300,7 +346,7 @@ func (g *generator) header(lintSteps, exclude []string, diffCoverage int, base s
 	for _, v := range g.collect(func(f stack.Make) []string { return f.Vars }) {
 		b.WriteString(v + "\n")
 	}
-	b.WriteString("\n")
+	b.WriteString("\n" + guards + "\n")
 }
 
 // rule writes one target; a target without recipe lines runs @true so make does not report it as having nothing to do.
@@ -415,6 +461,7 @@ func Merge(existing string, generated string) string {
 	if len(vars) > 0 {
 		b.WriteString("\n")
 	}
+	b.WriteString(missingDefines(have, gen))
 	b.WriteString(".PHONY: " + strings.Join(names, " ") + "\n\n")
 	for _, name := range names {
 		t := gen.Targets[name]
@@ -423,6 +470,22 @@ func Merge(existing string, generated string) string {
 			b.WriteString("\t" + r + "\n")
 		}
 		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// missingDefines returns the define blocks of gen that have lacks, in name order: the appended targets call them.
+func missingDefines(have, gen *Makefile) string {
+	var names []string
+	for name := range gen.Defines {
+		if _, ok := have.Defines[name]; !ok {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, name := range names {
+		b.WriteString(gen.Defines[name] + "\n")
 	}
 	return b.String()
 }

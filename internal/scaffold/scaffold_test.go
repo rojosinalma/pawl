@@ -64,7 +64,7 @@ func checkHook(t *testing.T, dir string, _ *Result) {
 	if st.Mode().Perm()&0o111 == 0 {
 		t.Errorf("hook mode %v is not executable", st.Mode())
 	}
-	assertContains(t, "hook", readFile(t, dir, hookPath), "set -eu", `exec "${PAWL:-pawl}" run precommit`, "git config pawl.toolbox")
+	assertContains(t, "hook", readFile(t, dir, hookPath), "set -eu", `pawl="${PAWL:-pawl}"`, `command -v "${pawl}"`, `exec "${pawl}" run precommit`, "exec make precommit", "git config pawl.toolbox")
 	if got := runIn(t, dir, "git", "config", "core.hooksPath"); got != hooksDir {
 		t.Errorf("core.hooksPath = %q", got)
 	}
@@ -102,8 +102,9 @@ func checkWorkflows(t *testing.T, dir string, _ *Result) {
 func checkMakefile(t *testing.T, dir string, _ *Result) {
 	t.Helper()
 	mk := readFile(t, dir, "Makefile")
-	assertContains(t, "Makefile", mk, "\t$(PAWL) verify\n", "\t$(PAWL) verify --ring precommit\n", "\t$(PAWL) verify --ring nightly\n")
-	assertLacks(t, "Makefile", mk, "$(PAWL) check")
+	assertContains(t, "Makefile", mk, "\t@$(call pawl_run,verify)\n", "\t@$(call pawl_run,verify --ring precommit)\n",
+		"\t@$(call pawl_run,verify --ring nightly)\n", "\t@$(call pawl_run,budget)\n", "\ndefine pawl_guard\n", "PAWL_REQUIRED=1")
+	assertLacks(t, "Makefile", mk, "$(PAWL) check", "\t$(PAWL) verify")
 }
 
 func checkAgents(t *testing.T, dir string, _ *Result) {
@@ -112,7 +113,7 @@ func checkAgents(t *testing.T, dir string, _ *Result) {
 	if !strings.HasPrefix(agents, "# demo\n\n"+agentsBegin) {
 		t.Errorf("AGENTS.md starts wrong:\n%s", agents)
 	}
-	assertContains(t, "AGENTS.md", agents, "## Quality gate", "`make check` is the merge gate", "`pawl verify`", "`pawl check` runs it", "`pawl rules show <id>`",
+	assertContains(t, "AGENTS.md", agents, "## Quality gate", "`make check` is the merge gate", "`pawl verify`", "`pawl run check` runs it", "`pawl rules show <id>`",
 		"never disable a linter rule", "## Review checklist", "## Not enforced here", agentsEnd)
 	assertLacks(t, "AGENTS.md", agents, "AGENTS.local.md")
 	cat, err := catalog.Load()

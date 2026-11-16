@@ -11,8 +11,11 @@ import (
 )
 
 var (
-	// pawlVerifyRe finds `pawl verify` in a recipe, called directly or through the PAWL variable.
-	pawlVerifyRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+verify\b`)
+	// pawlVerifyRe finds `pawl verify` in a recipe: called directly, through the PAWL variable or through the guard
+	// macro the generated Makefile defines.
+	pawlVerifyRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+verify\b|\$\(call\s+pawl_run,\s*verify\b`)
+	// pawlBareRe finds a pawl command a recipe runs without the guard macro; group 3 is the command and its arguments.
+	pawlBareRe = regexp.MustCompile(`(^|[\s;&|(@-])(\$\(PAWL\)|\$\{PAWL\}|pawl)\s+((verify|budget|record|baseline|affected|run)\b.*)$`)
 	// pawlOldCheckRe finds the v0.1 call `pawl check`, which named the verification and now names the gate.
 	pawlOldCheckRe = regexp.MustCompile(`(\$\(PAWL\)|\$\{PAWL\}|\bpawl)\s+check\b`)
 	// pawlAffectedRe finds `pawl affected` in a recipe or a variable the recipe expands.
@@ -46,40 +49,57 @@ func (r *run) checkTargets() error {
 			WithFix("add the target, or run `pawl init`; it adds missing targets and keeps existing ones"))
 	}
 	old := r.checkOldCalls(mk)
+	r.checkBareCalls(mk, old)
 	if mk.Has("check") && !old["check"] && !recipeMatches(mk, "check", pawlVerifyRe, false) {
 		r.add(report.Errorf(rule, mk.Path, mk.Targets["check"].Line, "target `check` does not run `pawl verify`").
-			WithFix("add the recipe line `$(PAWL) verify` to the check target"))
+			WithFix(guardFix("verify")))
 	}
 	r.checkSteps(mk)
 	return nil
 }
 
-// CallsOldCheck reports whether the project's `check` target still calls `pawl check` for the verification, as the
-// Makefiles of pawl v0.1 did. `pawl check` asks this before it starts make, so such a Makefile does not call itself
-// without end.
-func CallsOldCheck(root string) bool {
-	mk, ok, err := makefile.Read(root)
-	if err != nil || !ok {
-		return false
-	}
-	t, ok := mk.Targets["check"]
-	return ok && recipeLinesMatch(mk, t.Recipe, pawlOldCheckRe, false)
+// ringVerify is the verification each ring target ends with, as `pawl` arguments.
+var ringVerify = map[string]string{"check": "verify", "precommit": "verify --ring precommit", "nightly": "verify --ring nightly"}
+
+// ringTargets are the ring targets in the order they are reported.
+var ringTargets = []string{"check", "precommit", "nightly"}
+
+// guardFix is the fix text for a ring target's pawl call: the guarded recipe line and where the macros come from.
+func guardFix(args string) string {
+	return fmt.Sprintf("use the recipe line `%s`; pawl_run and pawl_guard are defined at the top of the Makefile `pawl init` writes", makefile.PawlRun(args))
 }
 
-// checkOldCalls reports the ring targets whose own recipe still calls `pawl check` for the verification and returns
-// them. Inside make `pawl check` runs the verification with a note, so such a project works until the recipe is fixed.
+// checkOldCalls reports the ring targets whose own recipe still calls `pawl check` for the verification, as the
+// Makefiles of pawl v0.1 did, and returns them. `pawl check` was removed, so such a recipe fails.
 func (r *run) checkOldCalls(mk *makefile.Makefile) map[string]bool {
 	old := map[string]bool{}
-	for _, name := range []string{"check", "precommit", "nightly"} {
+	for _, name := range ringTargets {
 		t, ok := mk.Targets[name]
 		if !ok || !recipeLinesMatch(mk, t.Recipe, pawlOldCheckRe, false) {
 			continue
 		}
 		old[name] = true
-		r.add(report.Errorf("repo.targets", mk.Path, t.Line, "target `%s` calls `pawl check`, which is now the gate; the verification is `pawl verify`", name).
-			WithFix(`replace "check" with "verify" in the recipe`))
+		r.add(report.Errorf("repo.targets", mk.Path, t.Line, "target `%s` calls `pawl check`, which was removed; the verification is `pawl verify`", name).
+			WithFix(guardFix(ringVerify[name])))
 	}
 	return old
+}
+
+// checkBareCalls warns about each ring recipe line that runs pawl without the guard macro: on a machine without pawl
+// that target fails, though pawl is optional. Targets that still call `pawl check` already have an error.
+func (r *run) checkBareCalls(mk *makefile.Makefile, old map[string]bool) {
+	for _, name := range ringTargets {
+		t, ok := mk.Targets[name]
+		if !ok || old[name] {
+			continue
+		}
+		for _, line := range t.Recipe {
+			if m := pawlBareRe.FindStringSubmatch(line); m != nil {
+				r.add(report.Warnf("repo.targets", mk.Path, t.Line, "`make %s` fails on a machine without pawl: the recipe runs `%s` without the guard", name, strings.TrimSpace(line)).
+					WithFix(guardFix(strings.TrimSpace(m[3]))))
+			}
+		}
+	}
 }
 
 // checkSteps reports every step of an enforced rule that is no target or is not reached by check or nightly.
@@ -207,7 +227,7 @@ func (r *run) checkSpeed() error {
 	}
 	if !recipeMatches(mk, "test", pawlAffectedRe, true) {
 		r.add(report.Warnf(rule, mk.Path, mk.Targets["test"].Line, "target `test` runs every test; the check ring runs the affected scope").
-			WithFix("scope the test command with a variable such as `TEST_SCOPE ?= $(shell $(PAWL) affected <stack>)`"))
+			WithFix("scope the test command with a variable such as `TEST_SCOPE ?= $(shell $(PAWL) affected <stack> 2>/dev/null || echo <every test>)`"))
 	}
 	return nil
 }

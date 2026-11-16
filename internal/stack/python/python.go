@@ -293,7 +293,8 @@ func (Adapter) Make(p stack.Params) stack.Make {
 	}
 	return stack.Make{
 		Vars: []string{
-			"PY_TEST_SCOPE ?= $(shell $(PAWL) affected python 2>/dev/null)",
+			// without pawl (or when it fails) the scope is empty, and pytest without arguments collects every test
+			"PY_TEST_SCOPE ?= $(shell $(PAWL) affected python 2>/dev/null || true)",
 			"STAGED_PY := $(filter %.py %.pyi,$(STAGED))",
 		},
 		Fmt:      []string{"ruff format .", "ruff check --fix-only ."},

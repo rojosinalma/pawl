@@ -4,7 +4,6 @@
 //	PAWL_FULL       "1" runs every test instead of the affected scope; default: affected
 //	PAWL_VERBOSE    "1" makes doctor list every healthy tool; default: problems only
 //	PAWL_WORK_TYPE  feature, bugfix, hotfix or refactor, for the pull request size budget; default: from the branch name
-//	MAKELEVEL       set by make in its recipes; pawl reads it to tell a recipe's call from a person's
 //
 // It also hands out the standard variables pawl passes on or resolves against:
 //
@@ -31,9 +30,6 @@ func Verbose() bool { return os.Getenv("PAWL_VERBOSE") == "1" }
 
 // WorkType returns the declared work type of the change, or "".
 func WorkType() string { return strings.TrimSpace(os.Getenv("PAWL_WORK_TYPE")) }
-
-// InsideMake reports whether pawl runs from a make recipe: make sets MAKELEVEL for every command it starts.
-func InsideMake() bool { return os.Getenv("MAKELEVEL") != "" }
 
 // Environ returns the process environment as KEY=value pairs, the base every child process environment starts from.
 func Environ() []string { return os.Environ() }
