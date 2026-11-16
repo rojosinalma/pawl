@@ -496,35 +496,69 @@ func (a *app) printRule(r catalog.Rule) {
 }
 
 func (a *app) rulesSyncCmd() *cobra.Command {
-	return &cobra.Command{
+	var opts scaffold.SyncOptions
+	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Refresh the ast-grep rule pack and the AGENTS.md block from the manifest",
-		Args:  cobra.NoArgs,
+		Short: "Bring the rule files Pawl wrote up to date where nobody edited them, and the AGENTS.md block",
+		Long: `Renders every rule file Pawl writes (the tool configurations and the .pawl/ ast-grep pack) from pawl.toml
+and compares each with the file on disk and with .pawl/generated.json, the record of what Pawl wrote:
+
+  updated   the file is the one Pawl recorded writing: it gets this version's rendering
+  created   a missing file of the .pawl/ pack (or one named with --force)
+  kept      the file was edited, or Pawl has no record of writing it: it stays as it is
+  kept      (removed) Pawl wrote it and the project deleted it: it stays deleted
+
+One edit makes the whole file the project's. --force <path> takes Pawl's version of that file anyway; repeat it
+for more files. Paths are relative to the project root. Tool versions are not part of it: mise.toml pins them.
+The Pawl block of AGENTS.md is refreshed from the manifest's waived rules.`,
+		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			p, err := project.Load(a.dir)
 			if err != nil {
 				return err
 			}
-			updated, err := scaffold.SyncRules(p)
+			files, err := scaffold.SyncRules(p, opts)
 			if err != nil {
 				return err
 			}
-			for _, f := range updated {
-				fmt.Fprintf(a.stdout, "  wrote %s\n", f)
-			}
-			changed, err := scaffold.SyncAgents(p)
+			changed, err := scaffold.SyncAgents(p, opts.DryRun)
 			if err != nil {
 				return err
 			}
+			wrote := a.printSync(files)
 			if changed {
 				fmt.Fprintln(a.stdout, "  wrote AGENTS.md")
 			}
-			if len(updated) == 0 && !changed {
+			if !wrote && !changed {
 				fmt.Fprintln(a.stdout, "up to date")
 			}
 			return nil
 		},
 	}
+	cmd.Flags().StringArrayVar(&opts.Force, "force", nil, "take Pawl's version of this file even when it was edited (repeatable)")
+	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "print what would change, write nothing")
+	return cmd
+}
+
+// printSync prints one line per rule file that is not simply up to date; it reports whether any file was (or
+// would be) written or kept as edited.
+func (a *app) printSync(files []scaffold.SyncedFile) bool {
+	changed := false
+	for _, f := range files {
+		switch f.State {
+		case scaffold.SyncUpdated, scaffold.SyncCreated:
+			fmt.Fprintf(a.stdout, "  %-8s %s\n", f.State, f.Path)
+			changed = true
+		case scaffold.SyncEdited:
+			fmt.Fprintf(a.stdout, "  kept     %s (edited; pawl rules sync --force %s takes Pawl's version)\n", f.Path, f.Path)
+			changed = true
+		case scaffold.SyncRemoved:
+			fmt.Fprintf(a.stdout, "  kept     %s (removed)\n", f.Path)
+		case scaffold.SyncCurrent, scaffold.SyncAbsent:
+			// up to date, or a tool this project never got: nothing to report
+		}
+	}
+	return changed
 }
 
 func (a *app) affectedCmd() *cobra.Command {

@@ -9,6 +9,7 @@ import (
 	"github.com/rojosinalma/pawl/internal/makefile"
 	"github.com/rojosinalma/pawl/internal/manifest"
 	"github.com/rojosinalma/pawl/internal/project"
+	"github.com/rojosinalma/pawl/internal/stack"
 )
 
 // Options of an init run.
@@ -69,20 +70,46 @@ func Init(root string, opts Options) (*Result, error) {
 	return res, nil
 }
 
-// writeConfigs writes the tool configurations of every active adapter that are missing.
+// writeConfigs writes the tool configurations of every active adapter that are missing, and records the hash of
+// each one it writes so `pawl rules sync` can later tell whether someone edited it. A kept file is not recorded:
+// Pawl did not write it.
 func writeConfigs(p *project.Project, w *writer) error {
+	rec, err := loadGenerated(p.Root)
+	if err != nil {
+		return err
+	}
+	existed := w.exists(GeneratedFile)
 	for _, a := range p.Adapters {
 		for _, c := range a.Configs(p.Params) {
-			mode := c.Mode
-			if mode == 0 {
-				mode = 0o644
+			if !w.exists(c.Path) {
+				rec.record(c.Path, []byte(c.Content))
 			}
-			if err := w.create(c.Path, c.Content, mode); err != nil {
+			if err := w.create(c.Path, c.Content, configMode(c)); err != nil {
 				return err
 			}
 		}
 	}
+	changed, err := rec.save(p.Root, w.dry)
+	if err != nil {
+		return err
+	}
+	switch {
+	case !existed:
+		w.res.Created = append(w.res.Created, GeneratedFile)
+	case changed:
+		w.res.Merged = append(w.res.Merged, GeneratedFile)
+	default:
+		w.res.Kept = append(w.res.Kept, GeneratedFile)
+	}
 	return nil
+}
+
+// configMode is the file mode a configuration is written with; adapters leave it zero for a plain file.
+func configMode(c stack.ConfigFile) os.FileMode {
+	if c.Mode == 0 {
+		return 0o644
+	}
+	return c.Mode
 }
 
 // writeMakefile writes the Makefile whole, or appends the targets an existing one lacks.

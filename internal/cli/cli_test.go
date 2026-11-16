@@ -323,3 +323,36 @@ func TestInitPinsTheSetupActionOfAReleaseBuild(t *testing.T) {
 		t.Errorf("check.yml lacks %q:\n%s", want, raw)
 	}
 }
+
+func TestRulesSyncKeepsEditedFilesUntilForced(t *testing.T) {
+	root := initRepo(t)
+	testrepo.Write(t, root, ".golangci.yml", "version: \"2\"\n")
+	testrepo.Write(t, root, ".pawl/rules/timeouts.yml", "# older pawl\n")
+	kept := "  kept     .golangci.yml (edited; pawl rules sync --force .golangci.yml takes Pawl's version)\n"
+
+	out, _, code := pawl(t, root, "rules", "sync", "--dry-run")
+	if code != 0 || !strings.Contains(out, kept) || !strings.Contains(out, "  kept     .pawl/rules/timeouts.yml (edited;") || strings.Contains(out, "up to date") {
+		t.Errorf("rules sync --dry-run (%d):\n%s", code, out)
+	}
+	if raw, err := os.ReadFile(filepath.Join(root, ".golangci.yml")); err != nil || string(raw) != "version: \"2\"\n" {
+		t.Errorf("--dry-run wrote .golangci.yml: %q, %v", raw, err)
+	}
+
+	out, _, code = pawl(t, root, "rules", "sync", "--force", ".golangci.yml", "--force", ".pawl/rules/timeouts.yml")
+	if code != 0 || out != "  updated  .golangci.yml\n  updated  .pawl/rules/timeouts.yml\n" {
+		t.Errorf("rules sync --force (%d):\n%s", code, out)
+	}
+	if out, _, code := pawl(t, root, "rules", "sync"); code != 0 || out != "up to date\n" {
+		t.Errorf("rules sync after --force (%d):\n%s", code, out)
+	}
+
+	if err := os.Remove(filepath.Join(root, ".jscpd.json")); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, code := pawl(t, root, "rules", "sync"); code != 0 || out != "  kept     .jscpd.json (removed)\nup to date\n" {
+		t.Errorf("rules sync after a removal (%d):\n%s", code, out)
+	}
+	if _, stderr, code := pawl(t, root, "rules", "sync", "--force", "go.mod"); code != 1 || !strings.Contains(stderr, "--force go.mod: not a file Pawl generates") {
+		t.Errorf("rules sync --force go.mod (%d): %s", code, stderr)
+	}
+}

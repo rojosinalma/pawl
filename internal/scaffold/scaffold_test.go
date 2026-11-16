@@ -284,7 +284,7 @@ func TestSyncAgentsReplacesBlockInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	changed, err := SyncAgents(p)
+	changed, err := SyncAgents(p, false)
 	if err != nil || !changed {
 		t.Fatalf("SyncAgents = %v, %v", changed, err)
 	}
@@ -292,52 +292,22 @@ func TestSyncAgentsReplacesBlockInPlace(t *testing.T) {
 	if got := readFile(t, dir, agentsFile); got != want {
 		t.Errorf("AGENTS.md =\n%s\nwant\n%s", got, want)
 	}
-	if changed, err := SyncAgents(p); err != nil || changed {
+	if changed, err := SyncAgents(p, false); err != nil || changed {
 		t.Errorf("second SyncAgents = %v, %v", changed, err)
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, agentsFile), []byte(agentsBegin+"\nno end\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := SyncAgents(p); err == nil {
+	if _, err := SyncAgents(p, false); err == nil {
 		t.Error("a block without an end marker was accepted")
 	}
 
 	if err := os.Remove(filepath.Join(dir, agentsFile)); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := SyncAgents(p); err != nil || !changed {
+	if changed, err := SyncAgents(p, false); err != nil || !changed {
 		t.Errorf("SyncAgents on a missing file = %v, %v", changed, err)
-	}
-}
-
-func TestSyncRulesRewritesEditedFiles(t *testing.T) {
-	dir := goShellProject(t, true)
-	mustInit(t, dir, Options{})
-	p, err := project.Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, err := SyncRules(p); err != nil || len(got) != 0 {
-		t.Fatalf("fresh SyncRules = %v, %v", got, err)
-	}
-	rule := ".pawl/rules/timeouts.yml"
-	original := readFile(t, dir, rule)
-	if err := os.WriteFile(filepath.Join(dir, rule), []byte("edited\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join(dir, ".pawl/sgconfig.yml")); err != nil {
-		t.Fatal(err)
-	}
-	got, err := SyncRules(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(got, ",") != ".pawl/rules/timeouts.yml,.pawl/sgconfig.yml" {
-		t.Errorf("SyncRules = %v", got)
-	}
-	if readFile(t, dir, rule) != original {
-		t.Error("rule not restored")
 	}
 }
 

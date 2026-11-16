@@ -1,19 +1,15 @@
 package scaffold
 
 import (
-	"bytes"
 	"embed"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/rojosinalma/pawl/internal/checks"
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/ratchet"
-	"github.com/rojosinalma/pawl/internal/stack"
 )
 
 //go:embed templates/*
@@ -120,51 +116,6 @@ func writeBaseline(p *project.Project, w *writer) error {
 		return fmt.Errorf("write %s: %w", ratchet.FileName, err)
 	}
 	return nil
-}
-
-// SyncRules rewrites the files of the ast-grep pack (.pawl/rules, .pawl/sgconfig.yml) that differ from what this
-// version of pawl renders for the manifest; it returns the paths it wrote.
-func SyncRules(p *project.Project) ([]string, error) {
-	common, ok := stack.Get(project.CommonStack)
-	if !ok {
-		return nil, errors.New("sync rules: the common adapter is not registered")
-	}
-	var written []string
-	for _, c := range common.Configs(p.Params) {
-		if !strings.HasPrefix(c.Path, ".pawl/") {
-			continue
-		}
-		path := filepath.Join(p.Root, c.Path)
-		if have, err := os.ReadFile(path); err == nil && bytes.Equal(have, []byte(c.Content)) {
-			continue
-		}
-		if err := writeFile(p.Root, c.Path, c.Content, 0o644); err != nil {
-			return nil, fmt.Errorf("sync rules: %w", err)
-		}
-		written = append(written, c.Path)
-	}
-	sort.Strings(written)
-	return written, nil
-}
-
-// SyncAgents rewrites pawl's block in AGENTS.md from the manifest's waived rules; it reports whether it changed.
-func SyncAgents(p *project.Project) (bool, error) {
-	path := filepath.Join(p.Root, agentsFile)
-	raw, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("read %s: %w", agentsFile, err)
-	}
-	content, err := agentsContent(p, string(raw), err == nil)
-	if err != nil {
-		return false, err
-	}
-	if content == string(raw) {
-		return false, nil
-	}
-	if err := writeFile(p.Root, agentsFile, content, 0o644); err != nil {
-		return false, fmt.Errorf("sync agents: %w", err)
-	}
-	return true, nil
 }
 
 // read returns a file under the root; ok is false when it does not exist.
