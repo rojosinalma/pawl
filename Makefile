@@ -8,8 +8,8 @@ SHELL := /bin/sh
 PAWL_EXCLUDE ?= ^(test/fixtures/)
 PAWL_BASE ?= origin/main
 DIFF_COVERAGE ?= 80
-# this repository checks itself with the pawl it builds: ./pawl after `make build`, else compiled on the fly
-PAWL ?= $(if $(wildcard ./pawl),./pawl,go run ./cmd/pawl)
+# this repository checks itself with the pawl it builds; ./pawl is rebuilt when a source changed (see below)
+PAWL ?= ./pawl
 STAGED := $(shell git diff --cached --name-only --diff-filter=ACMR)
 REPORTS := .pawl/reports
 # extra ast-grep flags, for example --globs '!gen/**' to skip generated code
@@ -104,8 +104,15 @@ nightly: check coverage audit mutation  ## everything, including the slow rings
 TOOLBOX_IMAGE ?= pawl-toolbox:dev
 MISE_IMAGE := $(shell sed -n 's/^ARG MISE_IMAGE=//p' toolbox/Dockerfile)
 
-build:  ## compile pawl into ./pawl
+PAWL_SOURCES := $(shell git ls-files cmd internal go.mod go.sum)
+
+pawl: $(PAWL_SOURCES)
 	CGO_ENABLED=0 go build -trimpath -o pawl ./cmd/pawl
+
+build: pawl  ## compile pawl into ./pawl
+
+# the rings run the pawl of this commit
+check precommit nightly: pawl
 
 toolbox:  ## build the toolbox image (pawl plus every adapter's tools)
 	docker build -f toolbox/Dockerfile -t $(TOOLBOX_IMAGE) .
@@ -119,7 +126,7 @@ e2e:  ## every stack's fixtures with the real tools, inside the toolbox image (r
 E2E_PROJECT ?= .pawl/reports/e2e-project
 GIT_FIXTURE := git -c user.name=fixture -c user.email=fixture@example.com -c commit.gpgsign=false
 
-e2e-project: build  ## copy the Go fixture into E2E_PROJECT as a new repository and run `pawl init` there
+e2e-project: pawl  ## copy the Go fixture into E2E_PROJECT as a new repository and run `pawl init` there
 	rm -rf "$(E2E_PROJECT)" && mkdir -p "$(dir $(E2E_PROJECT))" && cp -a test/fixtures/go/pass "$(E2E_PROJECT)"
 	cd "$(E2E_PROJECT)" && git init -q -b main && git add -A && $(GIT_FIXTURE) commit -q -m fixture
 	cd "$(E2E_PROJECT)" && "$(CURDIR)/pawl" init
