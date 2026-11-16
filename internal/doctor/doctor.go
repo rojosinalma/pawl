@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rojosinalma/pawl/internal/config"
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/report"
 	"github.com/rojosinalma/pawl/internal/stack"
@@ -67,7 +68,7 @@ type result struct {
 // Run checks the tools of every active adapter (missing tool for the precommit or check ring: error; nightly-only:
 // warning; version differs from the pin: error), make, git, the hook path, and gh (warning when absent).
 func Run(p *project.Project) (*report.Report, error) {
-	return run(p, execRunner{timeout: toolTimeout}, os.Getenv("PAWL_VERBOSE") == "1")
+	return run(p, execRunner{timeout: toolTimeout}, config.Verbose())
 }
 
 func run(p *project.Project, r runner, verbose bool) (*report.Report, error) {

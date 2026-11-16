@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/rojosinalma/pawl/internal/catalog"
+	"github.com/rojosinalma/pawl/internal/config"
 	"github.com/rojosinalma/pawl/internal/gitx"
 	"github.com/rojosinalma/pawl/internal/manifest"
 	"github.com/rojosinalma/pawl/internal/stack"
@@ -196,7 +197,7 @@ func (p *Project) BaseRef() string {
 	if p.Repo == nil {
 		return ""
 	}
-	if env := os.Getenv("PAWL_BASE"); env != "" {
+	if env := config.Base(); env != "" {
 		if mb := p.Repo.MergeBase(env); mb != "" {
 			return mb
 		}

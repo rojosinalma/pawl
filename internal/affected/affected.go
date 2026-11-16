@@ -22,12 +22,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/rojosinalma/pawl/internal/config"
 	"github.com/rojosinalma/pawl/internal/project"
 )
 
@@ -90,7 +90,7 @@ func scope(p *project.Project, stackName string, run runner) (string, error) {
 		return "", fmt.Errorf("unknown stack %q (known: %s)", stackName, strings.Join(project.StackNames(), ", "))
 	}
 	all := st.everything(p)
-	if os.Getenv("PAWL_FULL") == "1" || p.Repo == nil {
+	if config.Full() || p.Repo == nil {
 		return all, nil
 	}
 	base := p.BaseRef()

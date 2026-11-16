@@ -3,7 +3,6 @@ package checks
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/rojosinalma/pawl/internal/config"
 	"github.com/rojosinalma/pawl/internal/manifest"
 	"github.com/rojosinalma/pawl/internal/ratchet"
 	"github.com/rojosinalma/pawl/internal/report"
@@ -150,7 +150,7 @@ func (r *run) checkPRSize() error {
 
 // workType is the budget key: the environment override, then the branch prefix, then feature.
 func (r *run) workType() string {
-	if wt := strings.TrimSpace(os.Getenv(workTypeEnv)); wt != "" {
+	if wt := config.WorkType(); wt != "" {
 		return wt
 	}
 	if r.p.Repo != nil {
