@@ -2,7 +2,7 @@
 # `make check` is the merge gate; `make precommit` runs from .githooks/pre-commit on staged files.
 .DEFAULT_GOAL := check
 SHELL := /bin/sh
-.PHONY: build toolbox toolbox-lock e2e check fmt fmt-check lint test precommit coverage audit mutation nightly lint-ast-grep lint-jscpd lint-typos lint-gitleaks lint-golangci-lint lint-mod-tidy lint-shellcheck lint-hadolint lint-actionlint lint-zizmor lint-docker-user
+.PHONY: build toolbox toolbox-lock e2e e2e-project e2e-project-check check fmt fmt-check lint test precommit coverage audit mutation nightly lint-ast-grep lint-jscpd lint-typos lint-gitleaks lint-golangci-lint lint-mod-tidy lint-shellcheck lint-hadolint lint-actionlint lint-zizmor lint-docker-user
 
 # Paths the file-list tools skip, as an extended regular expression; keep it in step with project.exclude in pawl.toml.
 PAWL_EXCLUDE ?= ^(test/fixtures/)
@@ -115,3 +115,17 @@ toolbox-lock:  ## regenerate toolbox/mise.lock after editing toolbox/mise.toml
 
 e2e:  ## every stack's fixtures with the real tools, inside the toolbox image (run `make toolbox` first)
 	docker run --rm -u "$(shell id -u):$(shell id -g)" -e PAWL_E2E_CHECK=1 -v "$(CURDIR)":/work $(TOOLBOX_IMAGE) go test -tags e2e -count=1 ./test/e2e/
+
+E2E_PROJECT ?= .pawl/reports/e2e-project
+GIT_FIXTURE := git -c user.name=fixture -c user.email=fixture@example.com -c commit.gpgsign=false
+
+e2e-project: build  ## copy the Go fixture into E2E_PROJECT as a new repository and run `pawl init` there
+	rm -rf "$(E2E_PROJECT)" && mkdir -p "$(dir $(E2E_PROJECT))" && cp -a test/fixtures/go/pass "$(E2E_PROJECT)"
+	cd "$(E2E_PROJECT)" && git init -q -b main && git add -A && $(GIT_FIXTURE) commit -q -m fixture
+	cd "$(E2E_PROJECT)" && "$(CURDIR)/pawl" init
+
+e2e-project-check:  ## run the new project's own gate with the tools its mise.toml pins
+	cd "$(E2E_PROJECT)" && sh -ec "$$(cat "$(CURDIR)/test/fixtures/go/setup")"
+	cd "$(E2E_PROJECT)" && $(MAKE) lint PAWL="$(CURDIR)/pawl"
+	cd "$(E2E_PROJECT)" && git add -A && "$(CURDIR)/pawl" baseline
+	cd "$(E2E_PROJECT)" && $(MAKE) check PAWL="$(CURDIR)/pawl"

@@ -142,14 +142,15 @@ func Regressions(base *Baseline, cur *Current) []Delta {
 	return out
 }
 
-// Stale returns the metrics whose baseline is above the current value (improvements not yet recorded) and the
-// metrics the current run measures that the baseline lacks.
+// Stale returns the metrics the baseline must record again: those whose value fell (an improvement not yet
+// recorded) and those it has never recorded that are above zero (a debt the ratchet cannot hold until it is written
+// down). A metric at zero that the baseline lacks needs no entry.
 func Stale(base *Baseline, cur *Current) []Delta {
 	var out []Delta
 	for _, k := range sortedKeys(cur.Metrics) {
 		was, known := base.Metrics[k]
 		now := cur.Metrics[k]
-		if !known || now < was {
+		if (known && now < was) || (!known && now > 0) {
 			out = append(out, Delta{Metric: k, Baseline: was, Current: now})
 		}
 	}

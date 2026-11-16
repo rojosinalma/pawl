@@ -15,6 +15,7 @@ func TestRegressionsAndStale(t *testing.T) {
 	cur.Set("code.file-size", []string{"b.go"})
 	cur.Count("escape.duplication", 1)
 	cur.Count("code.todo-links", 4)
+	cur.Count("tests.quarantine", 0)
 
 	reg := Regressions(base, cur)
 	if len(reg) != 1 {
@@ -29,7 +30,7 @@ func TestRegressionsAndStale(t *testing.T) {
 	for _, d := range stale {
 		got[d.Metric] = true
 	}
-	if !got["escape.duplication"] || !got["code.todo-links"] || got["escape.suppressions"] {
+	if !got["escape.duplication"] || !got["code.todo-links"] || got["escape.suppressions"] || got["tests.quarantine"] {
 		t.Errorf("Stale = %+v", stale)
 	}
 }

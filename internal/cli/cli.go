@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,7 +120,7 @@ func (a *app) printInit(res *scaffold.Result) {
 			fmt.Fprintf(a.stdout, "  %s\n", h)
 		}
 	}
-	fmt.Fprintln(a.stdout, "\nnext: `mise install` (the pinned tools), `pawl doctor`, `make check`, then commit.")
+	fmt.Fprintln(a.stdout, "\nnext: `mise install` (the pinned tools), `pawl doctor`, `make lint`, `pawl baseline` (records the debt of today), `make check`, then commit.")
 }
 
 func (a *app) checkCmd() *cobra.Command {
@@ -453,7 +452,14 @@ func (a *app) recordCmd() *cobra.Command {
 	}
 }
 
-// Main is the entry point used by cmd/pawl.
-func Main(version string) {
-	os.Exit(Execute(version, os.Args[1:], os.Stdout, os.Stderr))
+// ResolveVersion returns the version to report: the one the release build stamped, else the module version that
+// `go install module@version` records, else "dev".
+func ResolveVersion(stamped, module string) string {
+	if stamped != "" && stamped != "dev" {
+		return stamped
+	}
+	if module != "" && module != "(devel)" {
+		return module
+	}
+	return "dev"
 }

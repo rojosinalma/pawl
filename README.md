@@ -39,6 +39,8 @@ cd your-project
 pawl init        # detect the stacks; write pawl.toml, missing tool configs, make targets, the hook, the workflows
 mise install     # the pinned tools of the rings (or install them your own way; `pawl doctor` verifies)
 pawl doctor      # every tool present at its pinned version, hook active
+make lint        # the first run shows what the code owes; fix what you want to fix now
+pawl baseline    # record the rest (suppressions, duplicated blocks, oversized files): from here it only shrinks
 make check       # the merge gate: lint, tests, pawl check
 ```
 

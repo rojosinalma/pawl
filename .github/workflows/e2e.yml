@@ -33,3 +33,22 @@ jobs:
           build-args: PAWL_VERSION=ci
       - name: Fixtures of every stack
         run: make e2e TOOLBOX_IMAGE=pawl-toolbox:ci
+
+  # The path a project takes without the toolbox: `pawl init`, the tools from the generated mise.toml, `make check`.
+  generated:
+    name: generated setup on a fresh project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build pawl and initialise the Go fixture as a new repository
+        run: make e2e-project E2E_PROJECT="${RUNNER_TEMP}/project"
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          working_directory: ${{ runner.temp }}/project
+      - name: The gate of the new project
+        run: make e2e-project-check E2E_PROJECT="${RUNNER_TEMP}/project"

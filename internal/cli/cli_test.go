@@ -192,3 +192,18 @@ func TestStatusAndVersion(t *testing.T) {
 		t.Errorf("--version: %d %q", code, out)
 	}
 }
+
+func TestResolveVersion(t *testing.T) {
+	cases := []struct{ stamped, module, want string }{
+		{"v1.2.3", "v9.9.9", "v1.2.3"},
+		{"dev", "v0.1.0", "v0.1.0"},
+		{"", "v0.1.0", "v0.1.0"},
+		{"dev", "(devel)", "dev"},
+		{"dev", "", "dev"},
+	}
+	for _, c := range cases {
+		if got := ResolveVersion(c.stamped, c.module); got != c.want {
+			t.Errorf("ResolveVersion(%q, %q) = %q, want %q", c.stamped, c.module, got, c.want)
+		}
+	}
+}
