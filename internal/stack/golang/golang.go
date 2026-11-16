@@ -179,7 +179,8 @@ func (Adapter) Make(stack.Params) stack.Make {
 			"golangci-lint run $(GO_PKGS)",
 			"go mod tidy -diff",
 		},
-		Test: []string{"go test -shuffle=on -race -count=1 $(GO_TEST_SCOPE)"},
+		StepNames: map[string]string{"go mod tidy -diff": "mod-tidy"},
+		Test:      []string{"go test -shuffle=on -race -count=1 $(GO_TEST_SCOPE)"},
 		Precommit: []string{
 			`@[ -z "$(STAGED_GO)" ] || golangci-lint fmt --diff $(STAGED_GO)`,
 			`@[ -z "$(STAGED_GO)" ] || golangci-lint run --fast-only $(addprefix ./,$(sort $(dir $(STAGED_GO))))`,

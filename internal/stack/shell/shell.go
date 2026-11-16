@@ -117,11 +117,11 @@ func (Adapter) Verifiers(stack.Params) []stack.Verifier {
 }
 
 func (Adapter) Make(stack.Params) stack.Make {
-	find := `$(shell git ls-files -co --exclude-standard | xargs -r shfmt -f 2>/dev/null)`
+	find := `$(shell git ls-files -co --exclude-standard | grep -vE '$(PAWL_EXCLUDE)' | xargs -r shfmt -f 2>/dev/null)`
 	return stack.Make{
 		Vars: []string{
 			"SH_FILES := " + find,
-			"DOCKERFILES := $(shell git ls-files -co --exclude-standard | grep -E '(^|/)(Dockerfile(\\..*)?|Containerfile|.*\\.dockerfile)$$')",
+			"DOCKERFILES := $(shell git ls-files -co --exclude-standard | grep -vE '$(PAWL_EXCLUDE)' | grep -E '(^|/)(Dockerfile(\\..*)?|Containerfile|.*\\.dockerfile)$$')",
 			"WORKFLOWS := $(wildcard .github/workflows/*.yml .github/workflows/*.yaml)",
 			"BATS_FILES := $(filter %.bats,$(SH_FILES))",
 			"STAGED_SH := $(filter $(SH_FILES),$(STAGED))",
@@ -135,7 +135,8 @@ func (Adapter) Make(stack.Params) stack.Make {
 			`@[ -z "$(WORKFLOWS)" ] || zizmor --no-progress --min-severity low .github/workflows`,
 			dockerUser,
 		},
-		Test: []string{`@[ -z "$(BATS_FILES)" ] || bats $(BATS_FILES)`},
+		StepNames: map[string]string{dockerUser: "docker-user"},
+		Test:      []string{`@[ -z "$(BATS_FILES)" ] || bats $(BATS_FILES)`},
 		Precommit: []string{
 			`@[ -z "$(STAGED_SH)" ] || shfmt -d $(STAGED_SH)`,
 			`@[ -z "$(STAGED_SH)" ] || shellcheck $(STAGED_SH)`,

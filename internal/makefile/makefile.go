@@ -224,13 +224,21 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	for _, f := range frags {
 		lintLines = append(lintLines, f.Lint...)
 	}
-	lintSteps := stepNames("lint", lintLines)
+	named := map[string]string{}
+	for _, f := range frags {
+		for line, name := range f.StepNames {
+			named[line] = name
+		}
+	}
+	lintSteps := stepNames("lint", lintLines, named)
 	var b strings.Builder
 	b.WriteString("# Standard targets written by pawl (https://github.com/rojosinalma/pawl). Project-owned: edit freely.\n")
 	b.WriteString("# `make check` is the merge gate; `make precommit` runs from .githooks/pre-commit on staged files.\n")
 	b.WriteString(".DEFAULT_GOAL := check\n")
 	b.WriteString("SHELL := /bin/sh\n")
 	b.WriteString(".PHONY: " + strings.Join(append(append(append([]string{}, Standard...), Extra...), lintSteps...), " ") + "\n\n")
+	b.WriteString("# Paths the file-list tools skip, as an extended regular expression; keep it in step with project.exclude in pawl.toml.\n")
+	fmt.Fprintf(&b, "PAWL_EXCLUDE ?= %s\n", excludeRegex(p.Exclude))
 	fmt.Fprintf(&b, "PAWL_BASE ?= %s\n", base)
 	fmt.Fprintf(&b, "DIFF_COVERAGE ?= %d\n", diffCoverage)
 	for _, f := range frags {
@@ -266,9 +274,9 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	rule("fmt", "rewrite files with the formatters", nil, collect(func(f stack.Make) []string { return f.Fmt }))
 	rule("fmt-check", "fail when a file is not formatted", nil, collect(func(f stack.Make) []string { return f.FmtCheck }))
 	// one target per linter, so `make -k lint` reports every tool's findings instead of stopping at the first
-	rule("lint", "every linter, type checker and pattern rule on the whole tree", append([]string{"fmt-check"}, lintSteps...))
+	rule("lint", "every linter, type checker and pattern rule on the whole tree; `make -k lint` reports every step", append([]string{"fmt-check"}, lintSteps...))
 	for i, name := range lintSteps {
-		rule(name, "lint step", nil, []string{lintLines[i]})
+		rule(name, "one step of lint", nil, []string{lintLines[i]})
 	}
 	rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, collect(func(f stack.Make) []string { return f.Test }))
 	rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) check --ring precommit"})
@@ -279,12 +287,31 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	return b.String()
 }
 
+// excludeRegex turns the manifest's exclude prefixes into the regular expression of PAWL_EXCLUDE; without excludes
+// it matches nothing a path can be.
+func excludeRegex(prefixes []string) string {
+	var parts []string
+	for _, p := range prefixes {
+		if p = strings.TrimSuffix(filepath.ToSlash(p), "/"); p != "" {
+			parts = append(parts, regexp.QuoteMeta(p)+"/")
+		}
+	}
+	if len(parts) == 0 {
+		return "^$$"
+	}
+	return "^(" + strings.Join(parts, "|") + ")"
+}
+
 // stepNames names one sub-target per recipe line after the tool it runs ("lint-biome"), numbering repeats.
-func stepNames(prefix string, lines []string) []string {
+func stepNames(prefix string, lines []string, named map[string]string) []string {
 	seen := map[string]int{}
 	out := make([]string, 0, len(lines))
 	for _, l := range lines {
-		name := prefix + "-" + toolName(l)
+		tool := named[l]
+		if tool == "" {
+			tool = toolName(l)
+		}
+		name := prefix + "-" + tool
 		seen[name]++
 		if n := seen[name]; n > 1 {
 			name = fmt.Sprintf("%s-%d", name, n)

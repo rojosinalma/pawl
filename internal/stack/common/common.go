@@ -179,9 +179,11 @@ func (Adapter) Make(stack.Params) stack.Make {
 			"PAWL ?= pawl",
 			"STAGED := $(shell git diff --cached --name-only --diff-filter=ACMR)",
 			"REPORTS := .pawl/reports",
+			"# extra ast-grep flags, for example --globs '!gen/**' to skip generated code",
+			"AST_GREP_FLAGS ?=",
 		},
 		Lint: []string{
-			"ast-grep scan -c .pawl/sgconfig.yml",
+			"ast-grep scan -c .pawl/sgconfig.yml $(AST_GREP_FLAGS)",
 			// the duplication report the catalog check reads (.pawl/reports/jscpd-report.json); the ratchet judges it, so exit 0
 			"jscpd --silent --reporters json --output $(REPORTS) .",
 			"typos",

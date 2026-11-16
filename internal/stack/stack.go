@@ -71,7 +71,10 @@ type Pin struct {
 
 // Make is the stack's contribution to each standard target: recipe lines.
 type Make struct {
-	Vars      []string // variable definitions, one per line
+	Vars []string // variable definitions, one per line
+	// StepNames names the lint step of a recipe line whose first word does not say what it checks
+	// ("go mod tidy -diff" → "mod-tidy"); other lines are named after their tool.
+	StepNames map[string]string
 	Fmt       []string
 	FmtCheck  []string
 	Lint      []string

@@ -15,8 +15,9 @@ func TestStepNamesFollowTheTool(t *testing.T) {
 		"bundle exec rubocop",
 		"uv run pyright",
 		"@[ -z \"$(X)\" ] || true",
-	})
-	want := []string{"lint-ast-grep", "lint-gitleaks", "lint-gitleaks-2", "lint-tsc", "lint-rubocop", "lint-pyright", "lint-true"}
+		"go mod tidy -diff",
+	}, map[string]string{"go mod tidy -diff": "mod-tidy"})
+	want := []string{"lint-ast-grep", "lint-gitleaks", "lint-gitleaks-2", "lint-tsc", "lint-rubocop", "lint-pyright", "lint-true", "lint-mod-tidy"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("stepNames = %v, want %v", got, want)
 	}
@@ -33,5 +34,14 @@ func TestMergeSkipsStepsOfAnExistingLint(t *testing.T) {
 	}
 	if merged = Merge("test:\n\tgo test ./...\n", generated); !strings.Contains(merged, "lint-ruff:") {
 		t.Errorf("merge dropped the step of the lint target it adds:\n%s", merged)
+	}
+}
+
+func TestExcludeRegex(t *testing.T) {
+	if got := excludeRegex(nil); got != "^$$" {
+		t.Errorf("no excludes: %q", got)
+	}
+	if got := excludeRegex([]string{"test/fixtures/", "gen", ""}); got != "^(test/fixtures/|gen/)" {
+		t.Errorf("excludes: %q", got)
 	}
 }
