@@ -93,11 +93,13 @@ func TestJSONAndSARIFAreValid(t *testing.T) {
 
 func TestGitHubAnnotationsEscapeNewlines(t *testing.T) {
 	var b bytes.Buffer
-	if err := sample().Write(&b, GitHub); err != nil {
+	r := sample()
+	r.Add(Errorf("escape.duplication", "", 0, "rose"))
+	if err := r.Write(&b, GitHub); err != nil {
 		t.Fatal(err)
 	}
 	out := b.String()
-	for _, want := range []string{"::error file=a.go,line=3,title=code.lint::first%0Asecond", "::warning file=a.go,line=12,title=code.lint::50%25 slower", "Fix: pawl init"} {
+	for _, want := range []string{"::error file=a.go,line=3,title=code.lint::first%0Asecond", "::warning file=a.go,line=12,title=code.lint::50%25 slower", "Fix: pawl init", "::error title=escape.duplication::rose"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("annotations lack %q:\n%s", want, out)
 		}

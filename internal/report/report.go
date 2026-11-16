@@ -147,14 +147,16 @@ func writeGitHub(w io.Writer, r *Report) {
 		if f.Severity != Error {
 			level = "warning"
 		}
-		loc := ""
+		// the parameters follow the command after one space, separated by commas: "::error file=a.go,line=3,title=x::"
+		var params []string
 		if f.File != "" {
-			loc = fmt.Sprintf(" file=%s", f.File)
+			params = append(params, "file="+f.File)
 			if f.Line > 0 {
-				loc += fmt.Sprintf(",line=%d", f.Line)
+				params = append(params, fmt.Sprintf("line=%d", f.Line))
 			}
 		}
-		fmt.Fprintf(w, "::%s%s,title=%s::%s\n", level, loc, f.RuleID, escapeGH(messageWithFix(f)))
+		params = append(params, "title="+f.RuleID)
+		fmt.Fprintf(w, "::%s %s::%s\n", level, strings.Join(params, ","), escapeGH(messageWithFix(f)))
 	}
 }
 
