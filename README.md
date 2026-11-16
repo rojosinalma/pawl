@@ -67,7 +67,8 @@ make check       # the merge gate: lint, tests, `pawl verify`
 `make` is the real contract; Pawl is a frontend over it for ease of use.
 
 Every `make` target works without Pawl installed. The calls to `pawl` are skipped with a warning, and `make test`
-runs every test. `PAWL_REQUIRED=1`, which the generated CI workflows set, turns a missing Pawl into an error.
+runs every test. The git hook then runs `make precommit` itself. `PAWL_REQUIRED=1`, which the generated CI
+workflows set, turns a missing Pawl into an error.
 
 In CI, the generated workflows install Pawl with the action of this repository, pinned to a commit so Dependabot
 can keep it current:

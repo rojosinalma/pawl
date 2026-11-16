@@ -120,14 +120,14 @@ blocks (jscpd), `TODO` without a link.
 | Ring | Runs | Where | Target / limit |
 |---|---|---|---|
 | precommit | `make precommit`: format staged files, lint staged files, forbidden names, suppressions on staged files | `.githooks/pre-commit` (`core.hooksPath`) | 10 s / 20 s |
-| check | `make check`: lint, affected tests, `pawl verify` | pull request workflow; `merge_group` when a queue exists | 10 min / 15 min |
+| check | `make check`: lint, affected tests, `pawl verify` (without pawl: lint and every test, with a warning) | pull request workflow; `merge_group` when a queue exists | 10 min / 15 min |
 | nightly | `make check` with everything, plus mutation, audits, docs drift | nightly workflow on `main`; failures open issues | 20 min / 30 min |
 
 The hook records its wall time locally; the CI rings are read from the last ten completed runs on `main` through the
 GitHub API (setup steps excluded). The median above the target warns; above the limit fails `pawl budget`, which the
 nightly ring runs. A test that fails is never retried; `pawl` has no retry anywhere.
 
-`pawl affected` prints the test scope for the change against `base`: exact for Go (`go list -deps`) and Rust (`cargo
+`pawl affected` prints the test scope for the change against `base`: exact for Go (the import graph of `go list -json`) and Rust (`cargo
 metadata`), per changed file for the others, everything when a configuration, lockfile or workflow changed, or when
 `PAWL_FULL=1`. The Makefile uses it, with the stack's full scope when pawl is missing or fails:
 `GO_TEST_SCOPE ?= $(shell $(PAWL) affected go 2>/dev/null || echo ./...)`.
@@ -143,7 +143,7 @@ metadata`), per changed file for the others, everything when a configuration, lo
 | `pawl doctor` | every tool pinned and present at the pinned version; hook installed; `make` targets exist; `gh` present |
 | `pawl status` | the state of the current branch's pull request: failing check, the first file and line, the command that fixes it |
 | `pawl baseline` | record the current ratchet values (shrink); `--grow "reason"` to raise |
-| `pawl rules` | the catalog with each rule's status here; `pawl rules show <id>`; `pawl rules sync` refreshes the ast-grep pack |
+| `pawl rules` | the catalog with each rule's status here; `pawl rules show <id>`; `pawl rules sync` refreshes the ast-grep pack and the `AGENTS.md` block (rules only: tool versions are mise's, and the tool configurations stay as `pawl init` wrote them) |
 | `pawl affected` | the test scope of the change |
 | `pawl budget` | the ring medians against their budgets |
 | `pawl record` | stores a ring's wall time (hidden; for hooks of one's own) |
@@ -244,8 +244,11 @@ manifest.
 ## Known limits
 
 1. The toolbox image is 4.2 GB and built for linux/amd64 only (cargo-mutants has no arm64 binary in the lock).
-2. `pawl affected` is exact for Go and Rust. For Python, Ruby and TypeScript it maps a changed file to tests by
-   name, and falls back to the whole suite when a shared test helper or a configuration file changed.
+2. `pawl affected` follows the real dependency graph for Go and Rust. For Python, Ruby and TypeScript it maps a
+   changed file to tests by name, and falls back to the whole suite when a shared test helper or a configuration
+   file changed; a test that depends on the changed file only indirectly runs in the nightly ring, not before.
+   Go: a change to a file pulled in with `//go:embed` selects no package, so a change to embedded files alone
+   runs no Go test before the nightly ring. Ruby with RSpec: a change that touches no Ruby file runs every spec.
 3. The end-to-end fixtures cover each stack's default path. Not covered by a fixture: Ruby with RSpec, TypeScript on
    Node without Bun, Python without uv.
 4. `drift.contracts` checks that a changed contract file comes with a version bump in `pawl.toml`. It does not run
@@ -254,5 +257,9 @@ manifest.
    documented surface is, which layers exist) that no default can supply.
 6. A directive inside a multi-line string literal is counted as a suppression; the string check works per line.
 7. Linux and macOS only. The generated recipes and the hook are POSIX shell.
-8. Go: a package whose files all carry a build tag stops golangci-lint ("build constraints exclude all Go
-   files") when one of its files is staged or linted; list the tag under `run.build-tags` in `.golangci.yml`.
+8. The generated Makefile's guard for a missing pawl is tested with GNU make 4.4; make 3.81 (the macOS default)
+   supports the constructs it uses, but no test runs it there.
+9. `uses: rojosinalma/pawl@<sha>` in a generated workflow is tested through this repository's own e2e workflow
+   (the action of the commit, `version: latest`), not from a second repository.
+10. Go: a package whose files all carry a build tag stops golangci-lint ("build constraints exclude all Go
+    files") when one of its files is staged or linted; list the tag under `run.build-tags` in `.golangci.yml`.
