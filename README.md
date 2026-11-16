@@ -14,9 +14,9 @@ There is an extent that can't be covered by tooling, this should be added to Ski
 
 ### What is a _real_ Pawl?
 
-A [pawl](https://en.wikipedia.org/wiki/Pawl) is the small catch or gear that lets a ratchet wrench turn only one way.
+A [pawl](https://en.wikipedia.org/wiki/Pawl) is the small catch with a gear that lets it turn only one way.
 
-Pawl makes a repository's own tooling enforce a catalog of quality rules, and have them only move one way, the positive way.
+Pawl makes a project own tooling enforce a catalog of rules, and have them only move one way, the positive way.
 
 ## What it does
 
