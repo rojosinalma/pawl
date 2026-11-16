@@ -1,26 +1,27 @@
 // Package typescript is the TypeScript and JavaScript adapter (Bun first, Node accepted): Biome for lint and format,
-// oxlint with tsgolint for the type-aware promise rules, tsc strict, knip, dependency-cruiser, bun audit, Stryker.
+// oxlint with tsgolint for the type-aware promise rules, tsc strict, knip, bun audit, Stryker.
 package typescript
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/rojosinalma/pawl/internal/report"
 	"github.com/rojosinalma/pawl/internal/stack"
 	"github.com/rojosinalma/pawl/internal/stack/common"
 )
 
 // Pinned versions of the tools without a native pin file (Renovate moves them in mise.toml).
 const (
-	BiomeVersion             = "2.6.8"
-	OxlintVersion            = "1.93.0"
-	KnipVersion              = "6.45.1"
-	DependencyCruiserVersion = "18.7.2"
-	StrykerVersion           = "10.1.1"
+	BiomeVersion   = "2.6.8"
+	OxlintVersion  = "1.93.0"
+	KnipVersion    = "6.45.1"
+	StrykerVersion = "10.1.1"
 )
 
 type Adapter struct{}
@@ -67,7 +68,6 @@ func (Adapter) Tools() []stack.Tool {
 		{Name: "biome", Version: BiomeVersion, Check: []string{"biome", "--version"}, Mise: "biome", Install: "mise use biome@" + BiomeVersion, Rings: []string{"precommit", "check"}},
 		{Name: "oxlint", Version: OxlintVersion, Check: []string{"oxlint", "--version"}, Mise: "oxlint", Install: "mise use oxlint@" + OxlintVersion + " plus the npm package oxlint-tsgolint", Rings: []string{"check"}},
 		{Name: "knip", Version: KnipVersion, Check: []string{"knip", "--version"}, Mise: "npm:knip", Install: "mise use npm:knip@" + KnipVersion, Rings: []string{"check"}},
-		{Name: "depcruise", Version: DependencyCruiserVersion, Check: []string{"depcruise", "--version"}, Mise: "npm:dependency-cruiser", Install: "mise use npm:dependency-cruiser@" + DependencyCruiserVersion, Rings: []string{"check"}},
 	}
 }
 
@@ -90,12 +90,12 @@ func (Adapter) Pins() []stack.Pin {
 func (Adapter) Suppressions() []stack.Suppression {
 	globs := []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"}
 	return []stack.Suppression{
-		{Kind: "biome-ignore", Pattern: regexp.MustCompile(`biome-ignore\s+[\w/.-]+(?::\s*(?P<reason>.+))?`), Globs: globs},
+		{Kind: "biome-ignore", Pattern: regexp.MustCompile(`biome-ignore(?:-all|-start)?\s+[\w/.-]+(?:\([^)]*\))?(?::\s*(?P<reason>.+))?`), Globs: globs},
 		{Kind: "ts-ignore", Pattern: regexp.MustCompile(`@ts-ignore(?:\s*(?:--|:)?\s*(?P<reason>.+))?`), Globs: globs},
 		{Kind: "ts-expect-error", Pattern: regexp.MustCompile(`@ts-expect-error(?:\s*(?:--|:)?\s*(?P<reason>.+))?`), Globs: globs},
 		{Kind: "eslint-disable", Pattern: regexp.MustCompile(`eslint-disable(?:-next-line|-line)?(?:\s+[\w/@,-]+)?(?:\s*--\s*(?P<reason>.+))?`), Globs: globs},
 		{Kind: "oxlint-disable", Pattern: regexp.MustCompile(`oxlint-disable(?:-next-line|-line)?(?:\s+[\w/@,-]+)?(?:\s*--\s*(?P<reason>.+))?`), Globs: globs},
-		{Kind: "as-any", Pattern: regexp.MustCompile(`\bas\s+any\b(?:\s*//\s*(?P<reason>.+))?`), Globs: []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"}},
+		{Kind: "as-any", Pattern: regexp.MustCompile(`\bas\s+any\b[\s;,)\]}]*(?://\s*(?P<reason>.+))?`), Globs: []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"}},
 	}
 }
 
@@ -105,7 +105,6 @@ func (Adapter) Configs(p stack.Params) []stack.ConfigFile {
 		{Path: "biome.jsonc", Content: biome},
 		{Path: ".oxlintrc.json", Content: oxlintConfig},
 		{Path: "knip.json", Content: knipConfig},
-		{Path: ".dependency-cruiser.cjs", Content: depcruiseConfig},
 	}
 }
 
@@ -117,7 +116,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 		"code.lint":                 lint("biome"),
 		"code.types":                lint("tsc/strict"),
 		"code.complexity":           lint("biome/noExcessiveCognitiveComplexity"),
-		"code.boundaries":           {Waived: stack.Reason("typescript", "no layer boundaries declared yet; declare them in .dependency-cruiser.cjs (forbidden rules) and set step = \"lint\"")},
+		"code.boundaries":           {Waived: stack.Reason("typescript", "no layer boundaries declared yet; dependency-cruiser declares them (forbidden rules) but parses TypeScript only up to 6, so adopt it with typescript < 7 or its swc parser and set step = \"lint\"")},
 		"code.dead":                 lint("knip"),
 		"code.dropped-results":      lint("oxlint/no-floating-promises", "oxlint/no-misused-promises"),
 		"code.swallowed-errors":     lint("biome/noEmptyBlockStatements"),
@@ -127,7 +126,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 		"resilience.timeouts":       lint(sg["resilience.timeouts"]...),
 		"resilience.exhaustive":     lint("biome/useExhaustiveSwitchCases"),
 		"resilience.config-owner":   lint(sg["resilience.config-owner"]...),
-		"resilience.import-cycles":  lint("depcruise/no-circular"),
+		"resilience.import-cycles":  lint("biome/noImportCycles"),
 		"resilience.bounded-growth": lint(sg["resilience.bounded-growth"]...),
 		"tests.runner":              {Step: "test", Via: []string{"bun test"}},
 		"tests.smells":              lint("biome/noFocusedTests", "biome/noSkippedTests"),
@@ -141,9 +140,9 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 }
 
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
-	f, j := "biome.jsonc", stack.JSONC
+	f, j := biomeFile, stack.JSONC
 	rule := func(id, group, name string) stack.Verifier {
-		return stack.V(id, "biome/"+name, stack.NotEqual(f, j, "linter.rules."+group+"."+name, "off"), stack.NotEqual(f, j, "linter.enabled", false))
+		return stack.V(id, "biome/"+name, biomeRule(group, name), stack.NotEqual(f, j, "linter.enabled", false))
 	}
 	return []stack.Verifier{
 		stack.V("code.format", "biome/format", stack.Exists(f), stack.NotEqual(f, j, "formatter.enabled", false)),
@@ -159,10 +158,60 @@ func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 		rule("tests.smells", "suspicious", "noFocusedTests"),
 		rule("tests.smells", "suspicious", "noSkippedTests"),
 		rule("drift.security", "security", "noGlobalEval"),
-		stack.V("code.dropped-results", "oxlint/no-floating-promises", stack.Equal(".oxlintrc.json", stack.JSONC, "rules.typescript/no-floating-promises", "error"), stack.Equal(".oxlintrc.json", stack.JSONC, "options.typeAware", true)),
-		stack.V("code.dropped-results", "oxlint/no-misused-promises", stack.Equal(".oxlintrc.json", stack.JSONC, "rules.typescript/no-misused-promises", "error")),
+		stack.V("code.dropped-results", "oxlint/no-floating-promises", oxlintRule("typescript/no-floating-promises"), stack.Equal(oxlintFile, stack.JSONC, "options.typeAware", true)),
+		stack.V("code.dropped-results", "oxlint/no-misused-promises", oxlintRule("typescript/no-misused-promises")),
 		stack.V("code.dead", "knip", stack.Exists("knip.json")),
-		stack.V("resilience.import-cycles", "depcruise/no-circular", stack.Exists(".dependency-cruiser.cjs"), stack.Matches(".dependency-cruiser.cjs", regexp.MustCompile(`name:\s*['"]no-circular['"]`), "the no-circular rule")),
+		rule("resilience.import-cycles", "suspicious", "noImportCycles"),
+	}
+}
+
+const biomeFile = "biome.jsonc"
+
+// biomeRule reports when the Biome rule is missing from biome.jsonc or set to "off" (as a level string or as an
+// object's "level"). The rule must be listed: several of them are outside Biome's recommended preset.
+func biomeRule(group, name string) func(stack.Verify) []report.Finding {
+	return func(v stack.Verify) []report.Finding {
+		cfg, bad := load(v, biomeFile)
+		if bad != nil {
+			return bad
+		}
+		val, ok := cfg.GetKey("linter", "rules", group, name)
+		if obj, isObj := val.(map[string]any); isObj {
+			val = obj["level"]
+		}
+		if !ok || fmt.Sprint(val) == "off" {
+			return []report.Finding{report.Errorf(v.RuleID, biomeFile, 0, "linter.rules.%s.%s is %v, which turns %s off", group, name, val, v.Via).WithFix("set it to \"error\", or waive the rule in pawl.toml with a reason")}
+		}
+		return nil
+	}
+}
+
+// load parses a JSONC configuration; a missing or broken file is a finding.
+func load(v stack.Verify, file string) (*stack.Config, []report.Finding) {
+	cfg, err := stack.LoadConfig(v.Root, file, stack.JSONC)
+	if err != nil {
+		return nil, []report.Finding{report.Errorf(v.RuleID, file, 0, "cannot parse: %v", err)}
+	}
+	if cfg == nil {
+		return nil, []report.Finding{report.Errorf(v.RuleID, file, 0, "missing; %s needs it for %s", v.Via, v.RuleID).WithFix("pawl init writes a default, or waive the rule in pawl.toml")}
+	}
+	return cfg, nil
+}
+
+const oxlintFile = ".oxlintrc.json"
+
+// oxlintRule reports when the oxlint rule is not at "error" (its name has a slash, so the key is read literally).
+func oxlintRule(name string) func(stack.Verify) []report.Finding {
+	return func(v stack.Verify) []report.Finding {
+		cfg, bad := load(v, oxlintFile)
+		if bad != nil {
+			return bad
+		}
+		val, ok := cfg.GetKey("rules", name)
+		if level := fmt.Sprint(val); !ok || (level != "error" && level != "deny") {
+			return []report.Finding{report.Errorf(v.RuleID, oxlintFile, 0, "rules.%s must be \"error\" for %s (found %v)", name, v.Via, val).WithFix("set it, or waive the rule in pawl.toml with a reason")}
+		}
+		return nil
 	}
 }
 
@@ -181,19 +230,19 @@ func (Adapter) Make(p stack.Params) stack.Make {
 		Fmt:      []string{"biome format --write ."},
 		FmtCheck: []string{"biome format ."},
 		Lint: []string{
-			"biome ci .",
+			"biome ci --colors=off .",
 			"knip",
-			"depcruise --config .dependency-cruiser.cjs src",
 		},
 		Test: []string{test},
 		Precommit: []string{
-			`@[ -z "$(STAGED_TS)" ] || biome check $(STAGED_TS)`,
+			`@[ -z "$(STAGED_TS)" ] || biome check --no-errors-on-unmatched $(STAGED_TS)`,
 		},
 		Audit:    []string{audit},
 		Mutation: []string{"stryker run"},
 	}
 	if p.Facts["typescript"] == "true" {
-		m.Lint = append([]string{"tsc --noEmit", "oxlint --type-aware ."}, m.Lint...)
+		// the project's own TypeScript (a devDependency, the stack's native pin); oxlint reads typeAware from its config
+		m.Lint = append([]string{"node_modules/.bin/tsc --noEmit", "oxlint ."}, m.Lint...)
 	}
 	if runtime == "bun" {
 		m.Coverage = []string{
@@ -216,16 +265,36 @@ const biomeConfig = `{
   // rules the catalog needs stay on (or are waived in pawl.toml with a reason).
   "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "ignoreUnknown": true },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.mts",
+      "**/*.cts",
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.mjs",
+      "**/*.cjs",
+      "**/*.json",
+      "**/*.jsonc",
+      "!**/.pawl"
+    ]
+  },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
-  "javascript": { "formatter": { "quoteStyle": "single", "semicolons": "always", "trailingCommas": "all" } },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "semicolons": "always", "trailingCommas": "all" }
+  },
   "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
     "enabled": true,
     "rules": {
       "preset": "recommended",
       "complexity": {
-        "noExcessiveCognitiveComplexity": { "level": "error", "options": { "maxAllowedComplexity": {{complexity}} } }
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": {{complexity}} }
+        }
       },
       "correctness": { "noUnusedImports": "error", "noUnusedVariables": "error" },
       "style": {
@@ -238,7 +307,8 @@ const biomeConfig = `{
         "noEmptyBlockStatements": "error",
         "noExplicitAny": "error",
         "noFocusedTests": "error",
-        "noSkippedTests": "error"
+        "noSkippedTests": "error",
+        "noImportCycles": "error"
       },
       "security": { "noGlobalEval": "error" },
       "nursery": { "useExhaustiveSwitchCases": "error" }
@@ -251,16 +321,17 @@ const biomeConfig = `{
     },
     {
       "includes": ["**/*.config.*", "**/scripts/**", "**/bin/**"],
-      "linter": { "rules": { "suspicious": { "noConsole": "off" }, "style": { "noDefaultExport": "off" } } }
+      "linter": {
+        "rules": { "suspicious": { "noConsole": "off" }, "style": { "noDefaultExport": "off" } }
+      }
     }
   ]
 }
 `
 
+// oxlintConfig turns on only the type-aware promise rules Biome does not cover; Biome owns everything else.
+// oxlint finds the oxlint-tsgolint package in node_modules. JSON without comments: Biome formats this file too.
 const oxlintConfig = `{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  // oxlint adds the type-aware promise rules Biome's inference does not cover yet. Needs the npm package
-  // oxlint-tsgolint. Biome owns everything else.
   "options": { "typeAware": true },
   "categories": { "correctness": "off" },
   "rules": {
@@ -270,25 +341,9 @@ const oxlintConfig = `{
 }
 `
 
+// knipConfig relies on knip's default entries (package.json main, module, bin, exports; src/index.ts and the like).
 const knipConfig = `{
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/index.ts", "src/main.ts", "index.ts", "bin/*.ts"],
-  "project": ["src/**/*.ts", "**/*.ts"],
   "ignoreDependencies": ["oxlint-tsgolint"]
 }
-`
-
-const depcruiseConfig = `/** dependency-cruiser configuration written by pawl. Declare layer boundaries as forbidden rules here. */
-module.exports = {
-  forbidden: [
-    { name: 'no-circular', severity: 'error', from: {}, to: { circular: true } },
-    { name: 'no-orphans', severity: 'warn', from: { orphan: true, pathNot: ['\\.d\\.ts$', '(^|/)index\\.ts$'] }, to: {} },
-  ],
-  options: {
-    doNotFollow: { path: 'node_modules' },
-    tsPreCompilationDeps: true,
-    tsConfig: { fileName: 'tsconfig.json' },
-    enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'require', 'node', 'default'] },
-  },
-};
 `

@@ -61,9 +61,13 @@ rule:
     - pattern: $NAME = list()
     - pattern: "$NAME: $T = []"
     - pattern: "$NAME: $T = {}"
+  # the assignment's parent is an expression_statement; module level means that statement sits directly in the module
   inside:
-    kind: module
+    kind: expression_statement
     stopBy: neighbor
+    inside:
+      kind: module
+      stopBy: neighbor
 constraints:
   NAME:
     regex: "^[a-z_]"

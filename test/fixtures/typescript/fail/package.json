@@ -1,0 +1,15 @@
+{
+  "name": "greeter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "module": "src/index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "oxlint-tsgolint": "7.0.2007",
+    "typescript": "7.0.2"
+  }
+}

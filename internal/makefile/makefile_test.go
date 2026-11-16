@@ -153,3 +153,19 @@ func TestMergeAddsOnlyMissingTargets(t *testing.T) {
 		t.Error("Merge is not idempotent")
 	}
 }
+
+func TestRecipesFollowsDependencies(t *testing.T) {
+	m := Parse(sample)
+	got := strings.Join(m.Recipes("check"), "\n")
+	for _, want := range []string{"pawl check", "golangci-lint run", "gofmt -l .", "$(GO) test ./..."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Recipes(check) lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "mod download") {
+		t.Errorf("Recipes(check) includes an unrelated target:\n%s", got)
+	}
+	if len(m.Recipes("nope")) != 0 {
+		t.Error("Recipes of a missing target is not empty")
+	}
+}

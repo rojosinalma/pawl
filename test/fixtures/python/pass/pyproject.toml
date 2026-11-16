@@ -1,0 +1,17 @@
+[project]
+name = "greeter"
+version = "0.1.0"
+description = "Greets people; a pawl fixture."
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest==9.2.0",
+  "pytest-randomly==5.1.0",
+  "coverage==7.17.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.8,<0.14"]
+build-backend = "uv_build"

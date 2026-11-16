@@ -1,0 +1,13 @@
+Layout/IndentationWidth
+Lint/UselessAssignment
+Lint/SuppressedException
+Style/RescueStandardError
+Lint/Debugger
+Naming/MethodName
+Metrics/CyclomaticComplexity
+Minitest/SkipWithoutReason
+config-owner-rb
+bounded-growth-rb
+test-branch-rb
+http-without-timeout-rb
+dynamic-code-rb

@@ -158,7 +158,7 @@ writes and the verifier for each rule; the make target bodies; the suppression p
 | lint | golangci-lint v2 | Biome, oxlint type-aware | RuboCop + performance | Ruff | ShellCheck, hadolint, actionlint, zizmor | clippy `-D warnings` |
 | types | compiler | tsc `--strict` | waived (Steep opt-in) | pyright strict | waived | compiler |
 | complexity | gocognit | Biome cognitive | RuboCop Metrics | Ruff C901 | waived | clippy cognitive |
-| boundaries | depguard | dependency-cruiser | packwerk (opt-in) | import-linter | waived | crate layout |
+| boundaries | depguard (opt-in) | waived (dependency-cruiser cannot parse TypeScript 7) | packwerk (opt-in) | import-linter (opt-in) | waived | crate layout |
 | dead code | unused | knip | waived | vulture | SC2034 | `dead_code` deny |
 | dropped results | errcheck | oxlint no-floating-promises | waived | RUF006 | `set -euo pipefail` (ast-grep) | `unused_must_use` deny |
 | swallowed errors | errcheck, nilerr | noEmptyBlockStatements | Lint/SuppressedException | BLE001, S110, E722 | waived | `let_underscore_must_use` |

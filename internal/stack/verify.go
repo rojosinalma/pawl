@@ -162,11 +162,17 @@ func closesNext(rest []byte) bool {
 // Get returns the value at a dotted path ("linter.rules.suspicious.noConsole"); list indexes are numeric segments.
 // Keys containing dots are written with a leading '/' separator form: "a/b.c" means key "b.c" under "a".
 func (c *Config) Get(path string) (any, bool) {
+	return c.GetKey(splitPath(path)...)
+}
+
+// GetKey returns the value under the literal keys, one per level, for keys that contain dots or slashes (RuboCop's
+// "Lint/Debugger", Ruff's per-file-ignores globs); list indexes are numeric keys.
+func (c *Config) GetKey(keys ...string) (any, bool) {
 	if c == nil {
 		return nil, false
 	}
 	cur := c.Data
-	for _, seg := range splitPath(path) {
+	for _, seg := range keys {
 		switch t := cur.(type) {
 		case map[string]any:
 			v, ok := t[seg]

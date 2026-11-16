@@ -137,7 +137,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 		"code.complexity":           lint("ruff/C901"),
 		"code.boundaries":           {Waived: stack.Reason("python", "no layer boundaries declared yet; declare contracts in .importlinter and set step = \"lint\"")},
 		"code.dead":                 lint("vulture"),
-		"code.dropped-results":      lint("ruff/RUF006", "ruff/B018"),
+		"code.dropped-results":      lint("ruff/RUF006", "ruff/B015", "ruff/B018"),
 		"code.swallowed-errors":     lint("ruff/BLE001", "ruff/S110", "ruff/E722"),
 		"code.debug-leftovers":      lint("ruff/T20", "ruff/ERA", "ruff/TD003"),
 		"code.naming":               lint("ruff/N"),
@@ -172,23 +172,26 @@ func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 		stack.V("code.types", "pyright/strict", stack.Equal("pyrightconfig.json", stack.JSONC, "typeCheckingMode", "strict")),
 		selected("code.complexity", "C901"),
 		stack.V("code.complexity", "ruff/C901", stack.Equal(f, t, prefix+".mccabe.max-complexity", p.Complexity)),
-		selected("code.dropped-results", "RUF"),
-		selected("code.dropped-results", "B"),
-		selected("code.swallowed-errors", "BLE"),
-		selected("code.swallowed-errors", "S"),
-		selected("code.swallowed-errors", "E"),
-		selected("code.debug-leftovers", "T20"),
-		selected("code.debug-leftovers", "ERA"),
-		selected("code.debug-leftovers", "TD"),
+		selected("code.dropped-results", "RUF006"),
+		selected("code.dropped-results", "B015"),
+		selected("code.dropped-results", "B018"),
+		selected("code.swallowed-errors", "BLE001"),
+		selected("code.swallowed-errors", "S110"),
+		selected("code.swallowed-errors", "E722"),
+		selected("code.debug-leftovers", "T201"),
+		selected("code.debug-leftovers", "ERA001"),
+		selected("code.debug-leftovers", "TD003"),
 		selected("code.naming", "N"),
 		selected("tests.smells", "PT"),
 		selected("drift.security", "S"),
-		stack.V("resilience.exhaustive", "pyright/reportMatchNotExhaustive", stack.Equal("pyrightconfig.json", stack.JSONC, "typeCheckingMode", "strict")),
+		stack.V("resilience.exhaustive", "pyright/reportMatchNotExhaustive", stack.Equal("pyrightconfig.json", stack.JSONC, "typeCheckingMode", "strict"),
+			stack.NotEqual("pyrightconfig.json", stack.JSONC, "reportMatchNotExhaustive", "none", false, "warning", "information")),
 	}
 }
 
-// ruffSelects reports when the ruff selection lacks the code (as itself or as a prefix such as "S" for "S110") or
-// ignores it.
+// ruffSelects reports when the ruff selection lacks the code (itself, or a selector covering it such as "S" or "S1"
+// for "S110") or an ignore entry turns it off (a selector covering it, or a code of the family when the code is a
+// whole family such as "N").
 func ruffSelects(file string, format stack.Format, prefix, code string) func(stack.Verify) []report.Finding {
 	return func(v stack.Verify) []report.Finding {
 		v.File, v.Format = file, format
@@ -196,10 +199,9 @@ func ruffSelects(file string, format stack.Format, prefix, code string) func(sta
 		if err != nil || cfg == nil {
 			return nil // Exists() reports the missing file
 		}
-		selectedList := append(list(cfg, prefix+".select"), list(cfg, prefix+".extend-select")...)
 		ok := false
-		for _, s := range selectedList {
-			if s == "ALL" || strings.HasPrefix(code, s) {
+		for _, s := range append(list(cfg, prefix+".select"), list(cfg, prefix+".extend-select")...) {
+			if covers(s, code) {
 				ok = true
 			}
 		}
@@ -207,12 +209,27 @@ func ruffSelects(file string, format stack.Format, prefix, code string) func(sta
 			return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s.select must include %q for %s", prefix, code, v.Via).WithFix("add it, or waive the rule in pawl.toml with a reason")}
 		}
 		for _, ig := range append(list(cfg, prefix+".ignore"), list(cfg, prefix+".extend-ignore")...) {
-			if strings.HasPrefix(code, ig) || strings.HasPrefix(ig, code) {
+			if covers(ig, code) || covers(code, ig) {
 				return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s.ignore lists %q, which turns %s off", prefix, ig, v.Via).WithFix("remove it, or waive the rule in pawl.toml with a reason")}
 			}
 		}
 		return nil
 	}
+}
+
+var ruffCode = regexp.MustCompile(`^([A-Z]+)([0-9]*)$`)
+
+// covers reports whether the Ruff selector ("ALL", a linter such as "B", or a code prefix such as "S1") selects the
+// code: the linter letters must be equal ("B" does not cover "BLE001") and the digits must start with the selector's.
+func covers(selector, code string) bool {
+	if selector == "ALL" {
+		return true
+	}
+	s, c := ruffCode.FindStringSubmatch(selector), ruffCode.FindStringSubmatch(code)
+	if s == nil || c == nil {
+		return false
+	}
+	return s[1] == c[1] && strings.HasPrefix(c[2], s[2])
 }
 
 func list(cfg *stack.Config, path string) []string {
@@ -243,7 +260,8 @@ func (Adapter) Make(p stack.Params) stack.Make {
 	src := p.Facts["source_dir"]
 	audit := "pip-audit"
 	if p.Facts["uv"] == "true" {
-		audit = "uv export --no-hashes --format requirements-txt -o $(REPORTS)/requirements.txt && pip-audit -r $(REPORTS)/requirements.txt"
+		// the locked set without the project itself (not on PyPI); hashed, so pip-audit needs no resolver run
+		audit = "uv export --quiet --frozen --no-emit-project --format requirements-txt -o $(REPORTS)/requirements.txt && pip-audit --disable-pip -r $(REPORTS)/requirements.txt"
 	}
 	return stack.Make{
 		Vars: []string{
@@ -254,18 +272,18 @@ func (Adapter) Make(p stack.Params) stack.Make {
 		FmtCheck: []string{"ruff format --check ."},
 		Lint: []string{
 			"ruff check .",
-			"pyright",
+			run + "pyright",
 			"vulture " + src + " --min-confidence 80",
-			"deptry .",
+			"deptry " + src,
 		},
-		Test: []string{run + "pytest -p randomly $(PY_TEST_SCOPE)"},
+		Test: []string{run + "pytest $(PY_TEST_SCOPE)"},
 		Precommit: []string{
 			`@[ -z "$(STAGED_PY)" ] || ruff format --check $(STAGED_PY)`,
 			`@[ -z "$(STAGED_PY)" ] || ruff check $(STAGED_PY)`,
 		},
 		Coverage: []string{
 			"@mkdir -p $(REPORTS)",
-			run + "coverage run -m pytest -p randomly",
+			run + "coverage run --source=" + src + " -m pytest",
 			run + "coverage xml -o $(REPORTS)/python-coverage.xml",
 			"diff-cover $(REPORTS)/python-coverage.xml --compare-branch=$(PAWL_BASE) --fail-under=$(DIFF_COVERAGE)",
 		},
@@ -334,8 +352,10 @@ root_package = .
 #     mypackage.storage
 `
 
-const pytestConfig = `# pytest configuration written by pawl: random order (pytest-randomly), no retries, strict markers.
+const pytestConfig = `# pytest configuration written by pawl: random order (pytest-randomly loads itself; required_plugins fails the
+# run without it), no retries, strict markers.
 [pytest]
-addopts = -p randomly --strict-markers
+required_plugins = pytest-randomly
+addopts = --strict-markers
 testpaths = tests
 `

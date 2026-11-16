@@ -1,0 +1,24 @@
+src/format.ts format
+lint/correctness/noUnusedVariables
+lint/suspicious/noExplicitAny
+error TS2322
+no-floating-promises
+lint/suspicious/noEmptyBlockStatements
+lint/suspicious/noConsole
+lint/complexity/noExcessiveCognitiveComplexity
+lint/suspicious/noImportCycles
+lint/style/useNamingConvention
+lint/nursery/useExhaustiveSwitchCases
+lint/suspicious/noFocusedTests
+lint/suspicious/noSkippedTests
+lint/security/noGlobalEval
+error[config-owner-ts]
+error[bounded-growth-ts]
+error[test-branch-ts]
+error[fetch-without-timeout-ts]
+error[dynamic-code-ts]
+error[mock-own-module-ts]
+Unused exports
+lint/suspicious/noDebugger
+lint/style/noDefaultExport
+lint/correctness/noUnusedImports

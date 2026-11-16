@@ -32,7 +32,6 @@ golangci-lint = "2.15.0"
 biome = "2.6.8"
 oxlint = "1.93.0"
 "npm:knip" = "6.45.1"
-"npm:dependency-cruiser" = "18.7.2"
 
 # Python
 ruff = "0.17.5"

@@ -140,13 +140,13 @@ func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 	}
 }
 
-// lintRunsClippy reports when the lint target has no cargo clippy line that passes $(CLIPPY_LINTS).
+// lintRunsClippy reports when the lint target and its steps have no cargo clippy line that passes $(CLIPPY_LINTS).
 func lintRunsClippy(v stack.Verify) []report.Finding {
 	m, ok, err := makefile.Read(v.Root)
 	if err != nil || !ok {
 		return []report.Finding{report.Errorf(v.RuleID, "Makefile", 0, "missing; %s needs it for %s", v.Via, v.RuleID).WithFix("pawl init writes one")}
 	}
-	for _, line := range m.Targets["lint"].Recipe {
+	for _, line := range m.Recipes("lint") {
 		if strings.Contains(line, "cargo clippy") && strings.Contains(line, "$(CLIPPY_LINTS)") {
 			return nil
 		}

@@ -3,12 +3,14 @@
 package ruby
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/rojosinalma/pawl/internal/report"
 	"github.com/rojosinalma/pawl/internal/stack"
 	"github.com/rojosinalma/pawl/internal/stack/common"
 )
@@ -148,39 +150,88 @@ func (Adapter) Rules(p stack.Params) map[string]stack.Enforcement {
 }
 
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
-	f, y := ".rubocop.yml", stack.YAML
-	cop := func(rule, name string) stack.Verifier {
-		return stack.V(rule, "rubocop/"+name, stack.NotEqual(f, y, name+"/Enabled", false))
-	}
+	f, y := rubocopFile, stack.YAML
+	cop := func(rule, name string) stack.Verifier { return stack.V(rule, "rubocop/"+name, copOn(name)) }
 	v := []stack.Verifier{
-		stack.V("code.lint", "rubocop", stack.Exists(f)),
-		stack.V("code.format", "rubocop/Layout", stack.NotEqual(f, y, "Layout/Enabled", false)),
+		stack.V("code.lint", "rubocop", stack.Exists(f), stack.NotEqual(f, y, "AllCops.DisabledByDefault", true)),
+		cop("code.format", "Layout"),
 		cop("code.complexity", "Metrics/CyclomaticComplexity"),
-		stack.V("code.complexity", "rubocop/Metrics/CyclomaticComplexity", stack.Equal(f, y, "Metrics/CyclomaticComplexity/Max", p.Complexity)),
+		stack.V("code.complexity", "rubocop/Metrics/CyclomaticComplexity", copSetting("Metrics/CyclomaticComplexity", "Max", p.Complexity)),
 		cop("code.complexity", "Metrics/PerceivedComplexity"),
 		cop("code.dead", "Lint/UselessAssignment"),
 		cop("code.dead", "Lint/UnusedMethodArgument"),
 		cop("code.swallowed-errors", "Lint/SuppressedException"),
 		cop("code.swallowed-errors", "Style/RescueStandardError"),
 		cop("code.debug-leftovers", "Lint/Debugger"),
-		stack.V("code.naming", "rubocop/Naming", stack.NotEqual(f, y, "Naming/Enabled", false)),
+		cop("code.naming", "Naming"),
 	}
 	if p.Facts["test_framework"] == "rspec" {
-		v = append(v, stack.V("tests.smells", "rubocop/RSpec/Focus", stack.Has(f, y, "plugins", "rubocop-rspec"), stack.NotEqual(f, y, "RSpec/Focus/Enabled", false)))
+		v = append(v, stack.V("tests.smells", "rubocop/RSpec/Focus", stack.Has(f, y, "plugins", "rubocop-rspec"), copOn("RSpec/Focus")))
 	} else {
-		v = append(v, stack.V("tests.smells", "rubocop/Minitest/SkipWithoutReason", stack.Has(f, y, "plugins", "rubocop-minitest"), stack.NotEqual(f, y, "Minitest/SkipWithoutReason/Enabled", false)))
+		v = append(v, stack.V("tests.smells", "rubocop/Minitest/SkipWithoutReason", stack.Has(f, y, "plugins", "rubocop-minitest"), copOn("Minitest/SkipWithoutReason")))
 	}
 	return v
+}
+
+const rubocopFile = ".rubocop.yml"
+
+// loadRubocop parses .rubocop.yml; a missing or broken file is a finding.
+func loadRubocop(v stack.Verify) (*stack.Config, []report.Finding) {
+	cfg, err := stack.LoadConfig(v.Root, rubocopFile, stack.YAML)
+	if err != nil {
+		return nil, []report.Finding{report.Errorf(v.RuleID, rubocopFile, 0, "cannot parse: %v", err)}
+	}
+	if cfg == nil {
+		return nil, []report.Finding{report.Errorf(v.RuleID, rubocopFile, 0, "missing; %s needs it for %s", v.Via, v.RuleID).WithFix("pawl init writes a default, or waive the rule in pawl.toml")}
+	}
+	return cfg, nil
+}
+
+// copOn reports when the cop ("Lint/Debugger") or its department ("Lint", RuboCop's department-level
+// "Enabled: false") is turned off. A department name alone checks the department.
+func copOn(name string) func(stack.Verify) []report.Finding {
+	return func(v stack.Verify) []report.Finding {
+		cfg, bad := loadRubocop(v)
+		if bad != nil {
+			return bad
+		}
+		keys := []string{name}
+		if dept, _, ok := strings.Cut(name, "/"); ok {
+			keys = append(keys, dept)
+		}
+		for _, k := range keys {
+			if val, ok := cfg.GetKey(k, "Enabled"); ok && fmt.Sprint(val) == "false" {
+				return []report.Finding{report.Errorf(v.RuleID, rubocopFile, 0, "%s: Enabled: false turns %s off", k, v.Via).WithFix("re-enable it, or waive the rule in pawl.toml with a reason")}
+			}
+		}
+		return nil
+	}
+}
+
+// copSetting reports when the cop's setting is missing or differs from want.
+func copSetting(name, key string, want any) func(stack.Verify) []report.Finding {
+	return func(v stack.Verify) []report.Finding {
+		cfg, bad := loadRubocop(v)
+		if bad != nil {
+			return bad
+		}
+		if val, ok := cfg.GetKey(name, key); !ok || fmt.Sprint(val) != fmt.Sprint(want) {
+			return []report.Finding{report.Errorf(v.RuleID, rubocopFile, 0, "%s: %s must be %v for %s (found %v)", name, key, want, v.Via, val).WithFix("set it, or waive the rule in pawl.toml with a reason")}
+		}
+		return nil
+	}
 }
 
 func (Adapter) Make(p stack.Params) stack.Make {
 	test := `bundle exec ruby -Ilib:test -e 'ARGV.each { |f| require File.expand_path(f) }' $(RUBY_TEST_SCOPE)`
 	scope := "RUBY_TEST_SCOPE ?= $(shell $(PAWL) affected ruby 2>/dev/null || find test -name '*_test.rb')"
 	mutation := "bundle exec mutant run --integration minitest"
+	helper := "test/test_helper.rb"
 	if p.Facts["test_framework"] == "rspec" {
 		test = "bundle exec rspec --order random $(RUBY_TEST_SCOPE)"
 		scope = "RUBY_TEST_SCOPE ?= $(shell $(PAWL) affected ruby 2>/dev/null)"
 		mutation = "bundle exec mutant run --integration rspec"
+		helper = "spec/spec_helper.rb"
 	}
 	return stack.Make{
 		Vars: []string{
@@ -196,12 +247,41 @@ func (Adapter) Make(p stack.Params) stack.Make {
 		},
 		Coverage: []string{
 			"@mkdir -p $(REPORTS)",
-			"COVERAGE=lcov " + test,
-			"diff-cover coverage/lcov/*.lcov --compare-branch=$(PAWL_BASE) --fail-under=$(DIFF_COVERAGE)",
+			coverageGuard(helper),
+			"COVERAGE=1 " + test,
+			"diff-cover " + LcovReport + " --compare-branch=$(PAWL_BASE) --fail-under=$(DIFF_COVERAGE)",
 		},
 		Audit:    []string{"bundle exec bundler-audit check --update"},
 		Mutation: []string{mutation},
 	}
+}
+
+// LcovReport is where the SimpleCov setup of CoverageHelper writes the lcov report diff-cover reads.
+const LcovReport = ".pawl/reports/ruby-lcov.info"
+
+// CoverageHelper is the SimpleCov setup the coverage target needs at the top of the test helper, before the code
+// under test loads; the generated recipe prints it when the helper lacks SimpleCov.
+func CoverageHelper(testDir string) []string {
+	return []string{
+		"if ENV['COVERAGE']",
+		"  require 'simplecov'",
+		"  require 'simplecov-lcov'",
+		"  SimpleCov::Formatter::LcovFormatter.config.report_with_single_file = true",
+		"  SimpleCov::Formatter::LcovFormatter.config.single_report_path = '" + LcovReport + "'",
+		"  SimpleCov.formatter = SimpleCov::Formatter::LcovFormatter",
+		"  SimpleCov.start { add_filter '/" + testDir + "/' }",
+		"end",
+	}
+}
+
+// coverageGuard is a recipe line that fails with the setup to paste when the test helper does not start SimpleCov.
+func coverageGuard(helper string) string {
+	lines := CoverageHelper(filepath.Dir(helper))
+	quoted := make([]string, len(lines))
+	for i, l := range lines {
+		quoted[i] = `"` + l + `"`
+	}
+	return "@grep -qs SimpleCov " + helper + ` || { printf '%s\n' "make coverage: add this to the top of ` + helper + `:" ` + strings.Join(quoted, " ") + "; exit 1; }"
 }
 
 const rubocopConfig = `# RuboCop configuration written by pawl. RuboCop's defaults implement the community Ruby Style Guide; this file
