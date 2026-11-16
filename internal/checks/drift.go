@@ -187,8 +187,12 @@ func (r *run) workType() string {
 	return "feature"
 }
 
-// changedLines counts added and deleted lines against base, without lockfiles and the baseline: both change by
-// machine, and counting them would punish a dependency bump or a ratchet update.
+// generatedRecord is the record of what Pawl wrote (scaffold.GeneratedFile; that package imports this one).
+const generatedRecord = ".pawl/generated.json"
+
+// changedLines counts added and deleted lines against base, without lockfiles, the baseline and the record of
+// generated files: they change by machine, and counting them would punish a dependency bump, a ratchet update or
+// a `pawl rules sync`.
 func changedLines(root, base string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitDiffTimeout)
 	defer cancel()
@@ -221,5 +225,5 @@ func countExcluded(file string) bool {
 		file = strings.TrimSuffix(file[i+4:], "}")
 	}
 	base := path.Base(file)
-	return file == ratchet.FileName || lockfiles[base] || strings.HasSuffix(base, ".lock")
+	return file == ratchet.FileName || file == generatedRecord || lockfiles[base] || strings.HasSuffix(base, ".lock")
 }

@@ -74,7 +74,7 @@ In CI, the generated workflows install Pawl with the action of this repository, 
 can keep it current:
 
 ```yaml
-- uses: rojosinalma/pawl@<commit sha> # v0.3.0
+- uses: rojosinalma/pawl@<commit sha> # v0.4.0
 ```
 
 `pawl run <target>` runs any `make` target (`lint`, `fmt`, `test`, a single `lint-<tool>`) with the pinned tools on

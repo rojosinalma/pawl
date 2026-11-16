@@ -126,6 +126,7 @@ func TestPRSizeSkips(t *testing.T) {
 func TestCountExcluded(t *testing.T) {
 	for file, want := range map[string]bool{
 		".pawl/baseline.json":           true,
+		".pawl/generated.json":          true,
 		"go.sum":                        true,
 		"web/bun.lock":                  true,
 		"vendor/x.lock":                 true,
