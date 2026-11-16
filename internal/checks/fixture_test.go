@@ -12,6 +12,7 @@ import (
 	"github.com/rojosinalma/pawl/internal/project"
 	"github.com/rojosinalma/pawl/internal/ratchet"
 	"github.com/rojosinalma/pawl/internal/report"
+	"github.com/rojosinalma/pawl/internal/testrepo"
 )
 
 // pinnedSHA is a well-formed commit SHA for workflow fixtures.
@@ -39,6 +40,7 @@ type fixture struct {
 // main and checked out on feature/work, so main is the base ref.
 func newFixture(t *testing.T, git bool) *fixture {
 	t.Helper()
+	testrepo.Isolate(t)
 	f := &fixture{t: t, dir: t.TempDir(), git: git}
 	f.write("go.mod", "module example.com/app\n\ngo 1.25\n")
 	f.write("go.sum", "")

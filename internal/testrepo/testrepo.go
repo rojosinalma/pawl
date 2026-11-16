@@ -32,10 +32,20 @@ func Git(t testing.TB, dir string, args ...string) {
 	}
 }
 
+// Isolate clears the PAWL_* variables for the test, so a run inside `make check` (which sets them for the real
+// project) measures the fixture and not the caller's environment.
+func Isolate(t testing.TB) {
+	t.Helper()
+	for _, name := range []string{"PAWL_BASE", "PAWL_FULL", "PAWL_VERBOSE", "PAWL_WORK_TYPE"} {
+		t.Setenv(name, "")
+	}
+}
+
 // New writes the files (path relative to the root → content) into a temporary directory and commits all of them
 // as the one commit on main. It returns the root.
 func New(t testing.TB, files map[string]string) string {
 	t.Helper()
+	Isolate(t)
 	root := t.TempDir()
 	for rel, content := range files {
 		Write(t, root, rel, content)

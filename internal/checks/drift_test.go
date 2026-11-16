@@ -92,8 +92,8 @@ func TestPRSize(t *testing.T) {
 		{"lockfiles do not count", "hotfix/x", "", 10, 5000, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(workTypeEnv, tc.workType)
 			f := newFixture(t, true)
+			t.Setenv(workTypeEnv, tc.workType)
 			f.run("git", "checkout", "-q", "-B", tc.branch)
 			f.write("notes.txt", strings.Repeat("line\n", tc.lines))
 			f.write("go.sum", strings.Repeat("example.com/x v1.0.0 h1:abc=\n", tc.lockfile))
@@ -116,8 +116,8 @@ func TestPRSizeSkips(t *testing.T) {
 	if !skipped(f.check("check", "drift.pr-size"), "drift.pr-size") {
 		t.Error("no base ref should skip")
 	}
-	t.Setenv(workTypeEnv, "chore")
 	g := newFixture(t, true)
+	t.Setenv(workTypeEnv, "chore")
 	if !skipped(g.check("check", "drift.pr-size"), "drift.pr-size") {
 		t.Error("a work type without a budget should skip")
 	}

@@ -188,6 +188,8 @@ func (Adapter) Make(stack.Params) stack.Make {
 			"GO_PKGS ?= ./...",
 			"GO_TEST_SCOPE ?= $(shell $(PAWL) affected go 2>/dev/null || echo ./...)",
 			"STAGED_GO := $(filter %.go,$(STAGED))",
+			"# the share of mutants the tests must kill; raise it as the tests improve, never lower it",
+			"MUTATION_SCORE ?= 60",
 		},
 		Fmt:      []string{"golangci-lint fmt $(GO_PKGS)"},
 		FmtCheck: []string{"golangci-lint fmt --diff $(GO_PKGS)"},
@@ -203,12 +205,12 @@ func (Adapter) Make(stack.Params) stack.Make {
 		},
 		Coverage: []string{
 			"@mkdir -p $(REPORTS)",
-			"go test -shuffle=on -count=1 -coverprofile=$(REPORTS)/go-coverage.out $(GO_PKGS)",
+			"go test -shuffle=on -count=1 -coverpkg=$(GO_PKGS) -coverprofile=$(REPORTS)/go-coverage.out $(GO_PKGS)",
 			"go tool gcov2lcov -infile $(REPORTS)/go-coverage.out -outfile $(REPORTS)/go-coverage.lcov",
 			"diff-cover $(REPORTS)/go-coverage.lcov --compare-branch=$(PAWL_BASE) --fail-under=$(DIFF_COVERAGE)",
 		},
 		Audit:    []string{"go tool govulncheck ./..."},
-		Mutation: []string{"gremlins unleash --tags=''"},
+		Mutation: []string{"gremlins unleash --threshold-efficacy $(MUTATION_SCORE)"},
 	}
 }
 

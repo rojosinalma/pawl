@@ -17,6 +17,8 @@ AST_GREP_FLAGS ?= --globs '!test/fixtures/**'
 GO_PKGS ?= ./...
 GO_TEST_SCOPE ?= $(shell $(PAWL) affected go 2>/dev/null || echo ./...)
 STAGED_GO := $(filter %.go,$(STAGED))
+# the share of mutants the tests must kill; raise it as the tests improve, never lower it
+MUTATION_SCORE ?= 80
 SH_FILES := $(shell git ls-files -co --exclude-standard | grep -vE '$(PAWL_EXCLUDE)' | xargs -r shfmt -f 2>/dev/null)
 DOCKERFILES := $(shell git ls-files -co --exclude-standard | grep -vE '$(PAWL_EXCLUDE)' | grep -E '(^|/)(Dockerfile(\..*)?|Containerfile|.*\.dockerfile)$$')
 WORKFLOWS := $(wildcard .github/workflows/*.yml .github/workflows/*.yaml)
@@ -84,7 +86,7 @@ precommit:  ## staged files only, under ten seconds; run by the git hook
 
 coverage:  ## tests with coverage; changed lines must reach DIFF_COVERAGE percent
 	@mkdir -p $(REPORTS)
-	go test -shuffle=on -count=1 -coverprofile=$(REPORTS)/go-coverage.out $(GO_PKGS)
+	go test -shuffle=on -count=1 -coverpkg=$(GO_PKGS) -coverprofile=$(REPORTS)/go-coverage.out $(GO_PKGS)
 	go tool gcov2lcov -infile $(REPORTS)/go-coverage.out -outfile $(REPORTS)/go-coverage.lcov
 	diff-cover $(REPORTS)/go-coverage.lcov --compare-branch=$(PAWL_BASE) --fail-under=$(DIFF_COVERAGE)
 
@@ -92,7 +94,7 @@ audit:  ## dependency vulnerability audits
 	go tool govulncheck ./...
 
 mutation:  ## mutation testing on the change (nightly)
-	gremlins unleash --tags=''
+	gremlins unleash --threshold-efficacy $(MUTATION_SCORE)
 
 nightly: check coverage audit mutation  ## everything, including the slow rings
 	$(PAWL) check --ring nightly

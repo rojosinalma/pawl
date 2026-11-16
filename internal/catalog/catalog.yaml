@@ -184,8 +184,8 @@ rules:
   - id: tests.mutation
     class: tests
     ring: nightly
-    title: "Mutation score never drops"
-    statement: "The mutation testing score on the changed files is a ratchet, run nightly."
+    title: "The tests kill the mutants"
+    statement: "Mutation testing runs nightly; the share of mutants the tests kill stays at or above the project's threshold, which is only raised."
 
   - id: tests.mock-edges
     class: tests

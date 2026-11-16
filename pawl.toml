@@ -183,7 +183,7 @@ step = "coverage"
 via = ["diff-cover"]
 gaps = ["shell: no coverage tool for shell"]
 
-# Mutation score never drops
+# The tests kill the mutants
 [rules."tests.mutation"]
 step = "mutation"
 via = ["gremlins"]
