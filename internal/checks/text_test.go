@@ -107,7 +107,7 @@ func TestSuppressions(t *testing.T) {
 func TestSuppressionsSkippedFiles(t *testing.T) {
 	f := newFixture(t, false)
 	directive := "gitleaks" + ":allow"
-	for _, path := range []string{".pawl/notes.txt", "go.sum", "deps.lock", ".golangci.yml", "bin.dat"} {
+	for _, path := range []string{".pawl/notes.txt", "go.sum", "deps.lock", ".golangci.yml", "bin.dat", "README.md", "docs/guide.rst"} {
 		content := directive + "\n"
 		if path == "bin.dat" {
 			content = "\x00" + content
@@ -121,12 +121,12 @@ func TestSuppressionsSkippedFiles(t *testing.T) {
 	if n := cur.Metrics["escape.suppressions"]; n != 0 {
 		t.Fatalf("suppressions = %d, want 0: %v", n, cur.Offenders["escape.suppressions"])
 	}
-	f.write("README.md", directive+"\n")
+	f.write("deploy.yaml", directive+"\n")
 	cur, err = Measure(f.load())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cur.Offenders["escape.suppressions"]; len(got) != 1 || got[0] != "README.md:1 gitleaks-allow" {
+	if got := cur.Offenders["escape.suppressions"]; len(got) != 1 || got[0] != "deploy.yaml:1 gitleaks-allow" {
 		t.Fatalf("offenders = %v", got)
 	}
 }

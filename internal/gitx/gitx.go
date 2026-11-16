@@ -86,7 +86,8 @@ func (r *Repo) MergeBase(ref string) string {
 	return strings.TrimSpace(out)
 }
 
-// Changed returns the paths that differ between base and the working tree (including staged and unstaged changes).
+// Changed returns the paths that were added, copied, modified or renamed between base and the working tree
+// (staged and unstaged changes included). Deleted paths are not listed: they no longer exist to be checked.
 func (r *Repo) Changed(base string) ([]string, error) {
 	out, err := run(r.Root, "diff", "--name-only", "--diff-filter=ACMR", "-z", base)
 	if err != nil {
@@ -95,7 +96,7 @@ func (r *Repo) Changed(base string) ([]string, error) {
 	return splitZ(out, r.Root, true), nil
 }
 
-// ChangedLines returns, per file, the count of added lines between base and the working tree.
+// ChangedLines returns the total added and deleted lines between base and the working tree.
 func (r *Repo) ChangedLines(base string) (added, deleted int, err error) {
 	out, err := run(r.Root, "diff", "--numstat", base)
 	if err != nil {

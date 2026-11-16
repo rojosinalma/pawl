@@ -286,7 +286,10 @@ func Write(root string, m *Manifest, cat *catalog.Catalog) error {
 	for _, class := range cat.Classes() {
 		fmt.Fprintf(&b, "# --- %s %s\n", class, strings.Repeat("-", 100-len(class)))
 		for _, r := range cat.ByClass(class) {
-			e := m.Rules[r.ID]
+			e, ok := m.Rules[r.ID]
+			if !ok {
+				continue // Validate reports a rule the manifest lacks; Write does not invent an entry for it
+			}
 			fmt.Fprintf(&b, "# %s\n[rules.%q]\n", r.Title, r.ID)
 			if e.Step != "" {
 				fmt.Fprintf(&b, "step = %q\n", e.Step)

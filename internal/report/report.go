@@ -168,6 +168,10 @@ func writeText(w io.Writer, r *Report) error {
 		if f.Severity != Error {
 			marker = string(f.Severity) + ": "
 		}
+		if f.Severity == Note && f.File == "" {
+			fmt.Fprintf(w, "%s\n", f.Message)
+			continue
+		}
 		fmt.Fprintf(w, "%s%s%s: %s\n", loc, marker, f.RuleID, f.Message)
 		if f.Fix != "" {
 			fmt.Fprintf(w, "    fix: %s\n", f.Fix)
@@ -177,7 +181,12 @@ func writeText(w io.Writer, r *Report) error {
 		fmt.Fprintf(w, "skipped: %s: %s\n", s.RuleID, s.Reason)
 	}
 	errs := r.Errors()
-	warns := len(r.Findings) - errs
+	warns := 0
+	for _, f := range r.Findings {
+		if f.Severity == Warning {
+			warns++
+		}
+	}
 	switch {
 	case errs == 0 && warns == 0:
 		fmt.Fprintf(w, "pawl: %d checks, no findings\n", len(r.Checked))

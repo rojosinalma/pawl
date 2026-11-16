@@ -150,13 +150,33 @@ func (m *Makefile) Reaches(target, wanted string) bool {
 			}
 		}
 		for _, r := range t.Recipe {
-			if strings.Contains(r, wanted) {
+			if mentions(r, wanted) {
 				return true
 			}
 		}
 		return false
 	}
 	return walk(target)
+}
+
+// mentions reports whether the recipe line contains wanted as whole words: "lint" is in "$(MAKE) lint" but not in
+// "golangci-lint run".
+func mentions(line, wanted string) bool {
+	for from := 0; ; {
+		i := strings.Index(line[from:], wanted)
+		if i < 0 {
+			return false
+		}
+		start, end := from+i, from+i+len(wanted)
+		if (start == 0 || !wordByte(line[start-1])) && (end == len(line) || !wordByte(line[end])) {
+			return true
+		}
+		from = start + 1
+	}
+}
+
+func wordByte(b byte) bool {
+	return b == '-' || b == '_' || b == '.' || b == '/' || (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 // DryRun returns the commands `make -n target` would run; it needs make on PATH.

@@ -176,7 +176,9 @@ func (h hit) offender() string { return fmt.Sprintf("%s:%d %s", h.File, h.Line, 
 // scannable reports whether the suppression scan reads the file at all.
 func scannable(f string) bool {
 	base := path.Base(f)
-	return !strings.HasPrefix(f, ".pawl/") && !lockfiles[base] && !strings.HasSuffix(base, ".lock") && !toolConfigs[f]
+	// documentation describes directives; it does not use them
+	prose := strings.HasSuffix(base, ".md") || strings.HasSuffix(base, ".mdx") || strings.HasSuffix(base, ".adoc") || strings.HasSuffix(base, ".rst")
+	return !prose && !strings.HasPrefix(f, ".pawl/") && !lockfiles[base] && !strings.HasSuffix(base, ".lock") && !toolConfigs[f]
 }
 
 // suppressionHits scans the files for every active adapter's directives, once per run.

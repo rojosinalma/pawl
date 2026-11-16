@@ -121,13 +121,24 @@ func varsMatch(mk *makefile.Makefile, line string, re *regexp.Regexp, depth int)
 	return false
 }
 
+// namesTool reports whether the manifest's via list names the verifier's tool, either exactly ("golangci-lint/errcheck")
+// or as the tool of one of its rules ("ast-grep" for "ast-grep/config-owner-go").
+func namesTool(via []string, tool string) bool {
+	for _, v := range via {
+		if v == tool || strings.HasPrefix(v, tool+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // checkVerifiers runs every adapter verifier whose rule is enforced and whose tool the manifest names in via; a
 // verifier for a tool the project replaced is skipped silently.
 func (r *run) checkVerifiers() error {
 	for _, a := range r.p.Adapters {
 		for _, v := range a.Verifiers(r.p.Params) {
 			e := r.p.Manifest.Rules[v.RuleID]
-			if !r.want(v.RuleID) || !e.Enforced() || !contains(e.Via, v.Via) {
+			if !r.want(v.RuleID) || !e.Enforced() || !namesTool(e.Via, v.Via) {
 				continue
 			}
 			r.mark(v.RuleID)

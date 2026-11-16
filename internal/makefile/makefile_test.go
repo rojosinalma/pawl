@@ -65,6 +65,8 @@ func TestReaches(t *testing.T) {
 		{"check", "fmt-check", true},
 		{"check", "pawl check", true},
 		{"check", "deps", false},
+		{"lint", "lint", false},
+		{"check", "golangci-lint run", true},
 		{"build", "deps", true},
 		{"nope", "lint", false},
 	}
