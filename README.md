@@ -4,6 +4,8 @@
 
 Pawl is a multi-stack tool for code quality and structure through configurable abstract rules that are enforced through tooling and automation native to the corresponding [stacks]( https://github.com/rojosinalma/pawl/blob/main/README.md#stacks).
 
+It uses `Mise` to keep tooling updated and `Make` to wrap tool calls and workflow control, so you can completely dispose of Pawl and continue working without it, but maintaining stacks and rules with Prawl gives you a central place to control your rules and tooling without worrying about updating every single repo every time a new update comes or if you want to apply the same set of rules across multiple projects.
+
 ### Why?
 
 Agents and AI Models take Skills and Rules that come in prose as suggestions if these are not hard-blocking them through tooling, so Prawl was born out of the need to stop wasting tokens you need to load at every turn and have quality gates that won't let code get to your releases if they don't meet your quality needs.
