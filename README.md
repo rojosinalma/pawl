@@ -44,6 +44,9 @@ pawl baseline    # record the rest (suppressions, duplicated blocks, oversized f
 make check       # the merge gate: lint, tests, pawl check
 ```
 
+The generated `mise.toml` pins the tools without a native pin file; the runtime of each stack stays where the
+stack keeps it (`go.mod`, `.ruby-version`, `.python-version`, `rust-toolchain.toml`).
+
 `pawl init` never overwrites a file. An existing `Makefile` gains only the targets it lacks; existing linter
 configurations stay as they are, and `pawl check` then reports which catalog rules they do not enforce.
 
