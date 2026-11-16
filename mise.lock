@@ -138,6 +138,9 @@ aube = { path = ".mise/locks/npm-jscpd/5.4.3", digest = "sha256:2e1793140644f9a9
 backend = "npm:jscpd"
 specifiers = ["5.4.3"]
 
+[tools."npm:jscpd".provenance]
+repository = "github.com/kucherenko/jscpd"
+
 [[tools."pypi:diff-cover"]]
 version = "11.0.2"
 backend = "pypi:diff-cover"
