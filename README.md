@@ -10,6 +10,8 @@ It uses `Mise` to keep tooling updated and `Make` to wrap tool calls and workflo
 
 Agents and AI Models take Skills and rules as suggestions if these are not enforced (kinda like humans), so Prawl was born to stop wasting tokens that need to load at every session turn and have quality gates that won't let agents run wild or circumvent what was told to them in prose.
 
+There is an extent that can't be covered by tooling, this should be added to Skills or simple instructions. These are mostly good practices and conventions that need some reasoning evaluator (human or agent), but everything that can be checked and enforced through tooling should be done as such.
+
 ### What is a _real_ Pawl?
 
 A pawl is the small catch or gear that lets a ratchet wrench turn only one way.
