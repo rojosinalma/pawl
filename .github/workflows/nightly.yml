@@ -29,6 +29,8 @@ jobs:
       issues: write # open or comment on the "nightly failed" issue
     env:
       PAWL_FULL: "1"
+      # Pawl is optional for make; in CI a missing Pawl is an error.
+      PAWL_REQUIRED: "1"
       PAWL_BASE: origin/main
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

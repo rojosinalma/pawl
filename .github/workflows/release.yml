@@ -19,6 +19,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # The generated workflows pin the action to a release commit without a version input, so its default is that tag.
+      - name: The action's default version is this tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          default="$(sed -n 's/^    default: *//p' action.yml)"
+          if [[ "${default}" != "${TAG}" ]]; then
+            echo "::error file=action.yml::the default of the version input is '${default}', the tag is ${TAG}: set it to ${TAG}, then tag again"
+            exit 1
+          fi
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -61,4 +71,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: PAWL_VERSION=${{ github.ref_name }}
+          build-args: |
+            PAWL_VERSION=${{ github.ref_name }}
+            PAWL_COMMIT=${{ github.sha }}

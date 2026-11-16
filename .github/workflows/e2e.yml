@@ -3,7 +3,7 @@ name: e2e
 
 on:
   pull_request:
-    paths: ["internal/**", "cmd/**", "test/**", "toolbox/**", "go.mod", "go.sum", ".github/workflows/e2e.yml"]
+    paths: ["internal/**", "cmd/**", "test/**", "toolbox/**", "go.mod", "go.sum", "action.yml", ".github/workflows/e2e.yml"]
   push:
     branches: [main]
   merge_group:

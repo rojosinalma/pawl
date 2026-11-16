@@ -8,12 +8,14 @@ ARG GO_IMAGE=golang:1.27-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443
 
 FROM ${GO_IMAGE} AS pawl
 ARG PAWL_VERSION=dev
+# the commit pawl is built from; the workflows `pawl init` writes pin the setup action to it
+ARG PAWL_COMMIT=
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${PAWL_VERSION}" -o /out/pawl ./cmd/pawl
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${PAWL_VERSION} -X main.commit=${PAWL_COMMIT}" -o /out/pawl ./cmd/pawl
 
 FROM ${MISE_IMAGE} AS tools
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
