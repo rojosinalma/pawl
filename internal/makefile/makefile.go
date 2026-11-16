@@ -217,7 +217,8 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{"$(PAWL) check"})
 	rule("fmt", "rewrite files with the formatters", nil, collect(func(f stack.Make) []string { return f.Fmt }))
 	rule("fmt-check", "fail when a file is not formatted", nil, collect(func(f stack.Make) []string { return f.FmtCheck }))
-	rule("lint", "every linter, type checker and pattern rule on the whole tree", []string{"fmt-check"}, collect(func(f stack.Make) []string { return f.Lint }))
+	lint := append(collect(func(f stack.Make) []string { return f.FmtCheck }), collect(func(f stack.Make) []string { return f.Lint })...)
+	rule("lint", "the format check, every linter, type checker and pattern rule on the whole tree; every step runs", nil, keepGoing(lint))
 	rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, collect(func(f stack.Make) []string { return f.Test }))
 	rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) check --ring precommit"})
 	rule("coverage", "tests with coverage; changed lines must reach DIFF_COVERAGE percent", nil, collect(func(f stack.Make) []string { return f.Coverage }))
@@ -225,6 +226,25 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 	rule("mutation", "mutation testing on the change (nightly)", nil, collect(func(f stack.Make) []string { return f.Mutation }))
 	rule("nightly", "everything, including the slow rings", []string{"check", "coverage", "audit", "mutation"}, []string{"$(PAWL) check --ring nightly", "$(PAWL) budget"})
 	return b.String()
+}
+
+// keepGoing joins recipe lines into one shell command that runs every line and fails at the end when one failed,
+// so one run of the target reports the findings of every tool.
+func keepGoing(lines []string) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	out := []string{"@rc=0; \\"}
+	for _, l := range lines {
+		l = strings.TrimLeft(l, "@-")
+		out = append(out, fmt.Sprintf("echo %s; { %s; } || rc=1; \\", shellQuote("+ "+l), l))
+	}
+	return append(out, "exit $$rc")
+}
+
+// shellQuote quotes s for /bin/sh with single quotes.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func depString(deps []string) string {

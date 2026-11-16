@@ -7,14 +7,19 @@ language: Go
 severity: error
 message: A package-level collection grows without a declared bound. Cap it, evict, or mark it bounded with a reason.
 rule:
+  kind: var_spec
   any:
-    - pattern: var $NAME = map[$K]$V{}
-    - pattern: var $NAME = make(map[$K]$V)
-    - pattern: var $NAME = []$T{}
-    - pattern: var $NAME = make([]$T, $$$)
+    - pattern: {context: "var $NAME = map[$K]$V{}", selector: var_spec}
+    - pattern: {context: "var $NAME = make(map[$K]$V)", selector: var_spec}
+    - pattern: {context: "var $NAME = []$T{}", selector: var_spec}
+    - pattern: {context: "var $NAME = make([]$T, $$$)", selector: var_spec}
+  # package level: the enclosing var declaration (grouped or not) sits directly in the file
   inside:
-    kind: source_file
-    stopBy: neighbor
+    kind: var_declaration
+    stopBy: end
+    inside:
+      kind: source_file
+      stopBy: neighbor
 files: ["**/*.go"]
 ignores: ["**/*_test.go"]
 ---

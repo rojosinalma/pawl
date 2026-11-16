@@ -4,11 +4,12 @@ id: config-owner-go
 language: Go
 severity: error
 message: Read the environment only in the configuration module ({{.ConfigModuleOrHint}}); pass the value in.
+# tree-sitter-go reads a bare `os.Getenv($KEY)` pattern as a type conversion, so the rule matches the call node
 rule:
-  any:
-    - pattern: os.Getenv($KEY)
-    - pattern: os.LookupEnv($KEY)
-    - pattern: os.Environ()
+  kind: call_expression
+  has:
+    field: function
+    regex: ^os\.(Getenv|LookupEnv|Environ)$
 files: ["**/*.go"]
 ignores: ["**/*_test.go"{{if .ConfigModule}}, "{{.ConfigModule}}/**"{{end}}]
 ---

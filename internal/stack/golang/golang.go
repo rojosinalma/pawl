@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rojosinalma/pawl/internal/report"
 	"github.com/rojosinalma/pawl/internal/stack"
 	"github.com/rojosinalma/pawl/internal/stack/common"
 )
@@ -18,9 +19,9 @@ const GolangciLintVersion = "2.15.0"
 
 // Go module tool versions pinned by `go get -tool`.
 const (
-	GovulncheckModule = "golang.org/x/vuln/cmd/govulncheck@v1.9.0"
+	GovulncheckModule = "golang.org/x/vuln/cmd/govulncheck@v1.7.0"
 	Gcov2lcovModule   = "github.com/jandelgado/gcov2lcov@v1.1.1"
-	GremlinsVersion   = "0.5.1"
+	GremlinsVersion   = "0.6.0"
 )
 
 type Adapter struct{}
@@ -113,28 +114,55 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 
 func (Adapter) Verifiers(p stack.Params) []stack.Verifier {
 	f, y := ".golangci.yml", stack.YAML
-	notDisabled := func(rule, linter string) stack.Verifier {
-		return stack.V(rule, "golangci-lint/"+linter, stack.Lacks(f, y, "linters.disable", linter), stack.NotEqual(f, y, "linters.default", "none"))
-	}
-	enabled := func(rule, linter string) stack.Verifier {
-		return stack.V(rule, "golangci-lint/"+linter, stack.Has(f, y, "linters.enable", linter), stack.Lacks(f, y, "linters.disable", linter))
+	on := func(rule, linter string) stack.Verifier {
+		return stack.V(rule, "golangci-lint/"+linter, linterOn(linter))
 	}
 	return []stack.Verifier{
 		stack.V("code.format", "golangci-lint/gofmt", stack.Has(f, y, "formatters.enable", "gofmt")),
 		stack.V("code.format", "golangci-lint/goimports", stack.Has(f, y, "formatters.enable", "goimports")),
 		stack.V("code.lint", "golangci-lint", stack.Exists(f), stack.Equal(f, y, "version", "2")),
-		enabled("code.complexity", "gocognit"),
+		on("code.complexity", "gocognit"),
 		stack.V("code.complexity", "golangci-lint/gocognit", stack.Equal(f, y, "linters.settings.gocognit.min-complexity", p.Complexity)),
-		notDisabled("code.dead", "unused"),
-		notDisabled("code.dropped-results", "errcheck"),
-		enabled("code.swallowed-errors", "nilerr"),
-		enabled("code.debug-leftovers", "forbidigo"),
-		enabled("code.naming", "revive"),
-		enabled("resilience.timeouts", "noctx"),
-		enabled("resilience.timeouts", "bodyclose"),
-		enabled("resilience.exhaustive", "exhaustive"),
-		enabled("tests.smells", "testifylint"),
-		enabled("drift.security", "gosec"),
+		on("code.dead", "unused"),
+		on("code.dropped-results", "errcheck"),
+		on("code.swallowed-errors", "nilerr"),
+		on("code.debug-leftovers", "forbidigo"),
+		stack.V("code.debug-leftovers", "golangci-lint/forbidigo", stack.Matches(f, regexp.MustCompile(`(?m)^\s*-\s*pattern:.*fmt`), "a forbidigo pattern for fmt.Print")),
+		on("code.naming", "revive"),
+		on("resilience.timeouts", "noctx"),
+		on("resilience.timeouts", "bodyclose"),
+		on("resilience.exhaustive", "exhaustive"),
+		on("tests.smells", "testifylint"),
+		on("drift.security", "gosec"),
+	}
+}
+
+// standardLinters are the linters golangci-lint v2 runs with `linters.default: standard`.
+var standardLinters = map[string]bool{"errcheck": true, "govet": true, "ineffassign": true, "staticcheck": true, "unused": true}
+
+// linterOn reports when .golangci.yml does not run the linter: it is listed under linters.disable, or neither
+// linters.enable nor linters.default (all, or standard for the standard set) turns it on.
+func linterOn(linter string) func(stack.Verify) []report.Finding {
+	const file = ".golangci.yml"
+	return func(v stack.Verify) []report.Finding {
+		cfg, err := stack.LoadConfig(v.Root, file, stack.YAML)
+		if err != nil {
+			return []report.Finding{report.Errorf(v.RuleID, file, 0, "cannot parse: %v", err)}
+		}
+		if cfg == nil {
+			return stack.Exists(file)(v)
+		}
+		if cfg.Contains("linters.disable", linter) {
+			return []report.Finding{report.Errorf(v.RuleID, file, 0, "linters.disable lists %q, which turns %s off", linter, v.Via).WithFix("remove it, or waive the rule in pawl.toml with a reason")}
+		}
+		def, _ := cfg.Get("linters.default")
+		if def == nil {
+			def = "standard"
+		}
+		if cfg.Contains("linters.enable", linter) || def == "all" || (def == "standard" && standardLinters[linter]) {
+			return nil
+		}
+		return []report.Finding{report.Errorf(v.RuleID, file, 0, "%s does not run (linters.default is %v and linters.enable lacks it)", v.Via, def).WithFix("add it to linters.enable, or waive the rule in pawl.toml with a reason")}
 	}
 }
 
@@ -223,6 +251,7 @@ formatters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  uniq-by-line: false
 
 run:
   timeout: 5m
