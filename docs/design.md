@@ -136,6 +136,9 @@ metadata`), per changed file for the others, everything when a configuration, lo
 | Command | Does |
 |---|---|
 | `pawl init` | detect stacks; write `pawl.toml`, the tool configurations that are missing, the make targets that are missing, `.githooks/pre-commit`, `.pawl/` (ast-grep pack, baseline), the workflows, the `AGENTS.md` block, `.gitignore` lines; print the waived rules to decide on |
+| `pawl install` | install mise when the machine lacks it (pinned version, checksum verified), the tools pinned in `mise.toml`, and each stack's packages through its own package manager; then the `pawl doctor` report; `--no-mise` skips mise |
+| `pawl run <ring>` | run `make <ring>` for `precommit`, `check` or `nightly` with the pinned tools on PATH: one line when it passes, the failing steps when it does not; records the wall time; runs in the toolbox image when `git config pawl.toolbox` names one; `--verbose`, `--no-toolbox` |
+| `pawl check` | the merge gate: exactly `pawl run check`. Called from a make recipe (a v0.1 Makefile's `check` target) it runs `pawl verify` instead and names the recipe to fix, so it never starts make again |
 | `pawl verify` | the catalog verification: manifest, targets, verifiers, text checks, ratchet; `--ring precommit` limits it to the fast checks on staged files; `--format text\|json\|sarif\|github` |
 | `pawl doctor` | every tool pinned and present at the pinned version; hook installed; `make` targets exist; `gh` present |
 | `pawl status` | the state of the current branch's pull request: failing check, the first file and line, the command that fixes it |
@@ -143,7 +146,7 @@ metadata`), per changed file for the others, everything when a configuration, lo
 | `pawl rules` | the catalog with each rule's status here; `pawl rules show <id>`; `pawl rules sync` refreshes the ast-grep pack |
 | `pawl affected` | the test scope of the change |
 | `pawl budget` | the ring medians against their budgets |
-| `pawl record` | used by the hook to store a ring's wall time |
+| `pawl record` | stores a ring's wall time (hidden; for hooks of one's own) |
 
 Output: one line per finding, `file:line: rule-id: message`, then the command that fixes it. Exit 0 or 1.
 
@@ -185,7 +188,7 @@ manifest.
 | tool configurations (`.golangci.yml`, `biome.jsonc`, `.rubocop.yml`, `ruff.toml`, `pyrightconfig.json`, `.shellcheckrc`, `.editorconfig`, `.hadolint.yaml`, `.github/actionlint.yaml`, `.github/zizmor.yml`, `clippy.toml`, `.gitleaks.toml`, `.jscpd.json`, `.typos.toml`) | project | written only when missing |
 | `.pawl/sgconfig.yml`, `.pawl/rules/*.yml` | pawl, refreshed by `pawl rules sync` when unedited | the ast-grep pack, templated with `config_module` and `own_module` |
 | `.pawl/baseline.json` | project, through `pawl baseline` | the ratchet |
-| `.githooks/pre-commit` | project | `make precommit`, timed |
+| `.githooks/pre-commit` | project | `pawl run precommit` (`make precommit`, timed) |
 | `.github/workflows/check.yml`, `nightly.yml`, `review.yml` | project | the rings; `review.yml` is `workflow_dispatch` only, off by default |
 | `AGENTS.md` | project; one marked block is pawl's | the review checklist from the waived rules, and the three commands an agent needs |
 | `.gitignore` | project | `.pawl/reports/`, `AGENTS.local.md` |
@@ -199,7 +202,7 @@ manifest.
 4. Each stack's native complexity tool; no meta-linter. jscpd for duplication because no native linter does it.
 5. The runtime of a stack is pinned in the stack's native file (`go.mod`, `.ruby-version`, `rust-toolchain.toml`).
    The tools without a native pin (linters shipped as binaries, the cross-stack tools) are pinned in `mise.toml`,
-   which `pawl init` writes and `mise install` installs; `pawl doctor` compares what is installed with the pins.
+   which `pawl init` writes and `pawl install` (or `mise install`) installs; `pawl doctor` compares what is installed with the pins.
    The toolbox image (`ghcr.io/rojosinalma/pawl-toolbox`) is an optional artifact with every adapter's tools, for
    CI and for machines without them.
 6. Shrink-only baseline compared with the base commit, stale baselines fail: the ratchet is strict in both directions.
@@ -215,6 +218,12 @@ manifest.
     `core.hooksPath` stays. What the existing configuration does not enforce shows up in `pawl verify`.
 13. This repository's own dependencies are kept current by Dependabot (Go modules, actions, the toolbox base images).
     Dependabot does not read `mise.toml`; those pins are bumped by hand and re-locked.
+14. make stays the contract: CI, the generated workflows and the Makefile recipes call make, and every ring works
+    with mise and make alone. pawl is a front end over it that adds quiet output, the toolbox fallback and timing.
+    `pawl check` is the gate through `pawl run check`; `pawl verify` is the catalog verification that `make check`
+    ends with. In v0.1 `pawl check` named the verification; inside make it still runs it, with a note.
+15. `pawl install` wraps mise and the stacks' package managers rather than installing tools itself. On a machine
+    without mise it downloads a pinned mise release and verifies its checksum before it runs it.
 
 ## Known limits
 

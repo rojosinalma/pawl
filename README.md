@@ -34,15 +34,27 @@ Binaries for Linux and macOS are on the [releases page](https://github.com/rojos
 
 ## Use
 
+With pawl:
+
 ```sh
 cd your-project
 pawl init        # detect the stacks; write pawl.toml, missing tool configs, make targets, the hook, the workflows
-mise install     # the pinned tools of the rings (or install them your own way; `pawl doctor` verifies)
-pawl doctor      # every tool present at its pinned version, hook active
+pawl install     # mise when the machine lacks it, the pinned tools, each stack's packages; then `pawl doctor`
 make lint        # the first run shows what the code owes; fix what you want to fix now
 pawl baseline    # record the rest (suppressions, duplicated blocks, oversized files): from here it only shrinks
+pawl check       # the merge gate, quietly: one line when it passes, only the failing steps when it does not
+```
+
+The same with mise and make, which is what CI runs:
+
+```sh
+mise install     # the pinned tools of the rings (or install them your own way; `pawl doctor` verifies)
 make check       # the merge gate: lint, tests, pawl verify
 ```
+
+make is the contract; pawl is a front end over it. `pawl check` is `pawl run check`: it runs `make check` with the
+pinned tools on PATH, prints only what failed, records the ring's time, and runs the ring in the toolbox image when
+the clone names one.
 
 The generated `mise.toml` pins the tools without a native pin file; the runtime of each stack stays where the
 stack keeps it (`go.mod`, `.ruby-version`, `.python-version`, `rust-toolchain.toml`).
@@ -55,6 +67,10 @@ Day to day:
 | Command | Purpose |
 |---|---|
 | `make check` | lint, the affected tests, and the catalog verification; the same command CI runs |
+| `pawl check` | `make check` through `pawl run`: quiet output, the pinned tools on PATH, the toolbox fallback, timing |
+| `pawl run <ring>` | one ring (`precommit`, `check`, `nightly`) through make; `--verbose` streams make's output, `--no-toolbox` stays on this machine |
+| `pawl verify` | the catalog verification alone (manifest, targets, tool configurations, text checks, ratchet); `make check` ends with it |
+| `pawl install` | mise when it is missing, the tools pinned in `mise.toml`, each stack's packages; then `pawl doctor` |
 | `make fmt` | rewrite files with the stack's formatters |
 | `pawl status` | why the pull request of this branch fails: the check, the first file and line, the fix |
 | `pawl rules` | the catalog with what this project does about each rule; `pawl rules show <id>` explains one |

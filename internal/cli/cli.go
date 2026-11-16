@@ -578,7 +578,7 @@ func (a *app) budgetCmd() *cobra.Command {
 func (a *app) recordCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:    "record <ring> <seconds>",
-		Short:  "Store one ring run's wall time (called by the git hook)",
+		Short:  "Store one ring run's wall time (pawl run records its own rings; this is for hooks of your own)",
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
