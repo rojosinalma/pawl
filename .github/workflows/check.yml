@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 30
     env:
       PAWL_BASE: origin/${{ github.base_ref || 'main' }}
+      # Pawl is optional for make; in CI a missing Pawl is an error.
+      PAWL_REQUIRED: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

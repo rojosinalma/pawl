@@ -84,10 +84,11 @@ func checkWorkflows(t *testing.T, dir string, _ *Result) {
 		"actions/checkout@"+actions["actions/checkout"].SHA+" # "+actions["actions/checkout"].Tag,
 		"actions/setup-go@"+actions["actions/setup-go"].SHA, "go-version-file: go.mod",
 		"jdx/mise-action@"+actions["jdx/mise-action"].SHA,
-		"releases/download/v1.2.3/pawl_1.2.3_linux_amd64.tar.gz", "name: Install pawl",
+		"PAWL_RELEASE: https://github.com/rojosinalma/pawl/releases/download/v1.2.3", "PAWL_ASSET: pawl_1.2.3_linux_amd64.tar.gz",
+		"name: Set up Pawl", "sha256sum -c asset.sha256", `PAWL_REQUIRED: "1"`,
 		"run: make check", "run: make coverage", "PAWL_BASE: origin/${{ github.base_ref || 'main' }}",
-		"if: failure()", "pawl verify --format github", "timeout-minutes: 30")
-	assertLacks(t, "check.yml", check, "setup-ruby", "setup-uv", "setup-bun", "rustup", "pawl check")
+		"if: failure()", "then pawl verify --format github; fi", "timeout-minutes: 30")
+	assertLacks(t, "check.yml", check, "setup-ruby", "setup-uv", "setup-bun", "rustup", "pawl check", "rojosinalma/pawl@")
 	nightly := readFile(t, dir, ".github/workflows/nightly.yml")
 	assertContains(t, "nightly.yml", nightly, `cron: "17 3 * * *"`, "workflow_dispatch", "run: make nightly", `PAWL_FULL: "1"`,
 		"issues: write", "GH_TOKEN: ${{ github.token }}", "TITLE: nightly failed", "gh issue create")
@@ -340,7 +341,7 @@ func TestSyncRulesRewritesEditedFiles(t *testing.T) {
 	}
 }
 
-func TestPawlURL(t *testing.T) {
+func TestPawlDownload(t *testing.T) {
 	latest := "https://github.com/rojosinalma/pawl/releases/latest/download/pawl_linux_amd64.tar.gz"
 	for version, want := range map[string]string{
 		"":               latest,
@@ -349,8 +350,25 @@ func TestPawlURL(t *testing.T) {
 		"1.2.3":          "https://github.com/rojosinalma/pawl/releases/download/v1.2.3/pawl_1.2.3_linux_amd64.tar.gz",
 		"v0.4.0-rc.1":    "https://github.com/rojosinalma/pawl/releases/download/v0.4.0-rc.1/pawl_0.4.0-rc.1_linux_amd64.tar.gz",
 	} {
-		if got := pawlURL(version); got != want {
-			t.Errorf("pawlURL(%q) = %s, want %s", version, got, want)
+		if release, asset := pawlDownload(version); release+"/"+asset != want {
+			t.Errorf("pawlDownload(%q) = %s/%s, want %s", version, release, asset, want)
+		}
+	}
+}
+
+func TestPawlUses(t *testing.T) {
+	const sha = "0123456789abcdef0123456789abcdef01234567"
+	for _, c := range []struct{ version, commit, want string }{
+		{"v1.2.3", sha, "rojosinalma/pawl@" + sha + " # v1.2.3"},
+		{"1.2.3", sha, "rojosinalma/pawl@" + sha + " # v1.2.3"},
+		{"dev", sha, ""},
+		{"v0.4.0-rc.1", sha, ""},
+		{"v1.2.3", "", ""},
+		{"v1.2.3", "0123456", ""},
+		{"v1.2.3", strings.ToUpper(sha), ""},
+	} {
+		if got := pawlUses(c.version, c.commit); got != c.want {
+			t.Errorf("pawlUses(%q, %q) = %q, want %q", c.version, c.commit, got, c.want)
 		}
 	}
 }
