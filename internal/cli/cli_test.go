@@ -146,9 +146,8 @@ func TestBaselineOnlyShrinksWithoutAReason(t *testing.T) {
 }
 
 func TestCommandsNeedAManifest(t *testing.T) {
-	t.Setenv("MAKELEVEL", "")
 	root := goRepo(t)
-	for _, args := range [][]string{{"verify"}, {"check"}, {"run", "check"}, {"install"}, {"doctor"}, {"status"}, {"baseline"}, {"rules"}, {"affected", "go"}, {"budget"}, {"record", "precommit", "1.5"}} {
+	for _, args := range [][]string{{"verify"}, {"run", "check"}, {"install"}, {"doctor"}, {"status"}, {"baseline"}, {"rules"}, {"affected", "go"}, {"budget"}, {"record", "precommit", "1.5"}} {
 		_, stderr, code := pawl(t, root, args...)
 		if code != 1 || !strings.Contains(stderr, "pawl init") {
 			t.Errorf("%v without a manifest: %d %q", args, code, stderr)
@@ -210,33 +209,6 @@ func TestResolveVersion(t *testing.T) {
 	}
 }
 
-func TestCheckInsideMakeVerifiesAndNamesTheOldRecipe(t *testing.T) {
-	root := initRepo(t)
-	if err := os.Remove(filepath.Join(root, ".githooks", "pre-commit")); err != nil {
-		t.Fatal(err)
-	}
-	oldMakefile := strings.ReplaceAll(readFile(t, root, "Makefile"), "$(PAWL) verify", "$(PAWL) check")
-	testrepo.Write(t, root, "Makefile", oldMakefile)
-	t.Setenv("MAKELEVEL", "1")
-	out, stderr, code := pawl(t, root, "check")
-	if code != 1 || !strings.Contains(out, "repo.hook") {
-		t.Errorf("check inside make does not run the verification (%d):\n%s", code, out)
-	}
-	if strings.TrimSpace(stderr) != `pawl: this Makefile calls "pawl check"; change the recipe to "pawl verify"` {
-		t.Errorf("check inside make: stderr %q", stderr)
-	}
-}
-
-// Inside another make (a project target that calls pawl) a current Makefile gets the gate, not the verification.
-func TestCheckInsideMakeRunsTheGateOfACurrentMakefile(t *testing.T) {
-	root := ringRepo(t)
-	t.Setenv("MAKELEVEL", "1")
-	out, stderr, code := pawl(t, root, "check", "--no-toolbox")
-	if code != 1 || !strings.Contains(out, "pawl: check failed") || strings.Contains(stderr, "change the recipe") {
-		t.Errorf("check inside make with a current Makefile: %d %q %q", code, out, stderr)
-	}
-}
-
 // ringRepo is initRepo with a Makefile whose rings need no tool: precommit passes, check and nightly fail in one step.
 func ringRepo(t *testing.T) string {
 	t.Helper()
@@ -251,7 +223,6 @@ func ringRepo(t *testing.T) string {
 }
 
 func TestRunReachesTheRunner(t *testing.T) {
-	t.Setenv("MAKELEVEL", "")
 	root := ringRepo(t)
 	out, stderr, code := pawl(t, root, "run", "precommit", "--no-toolbox")
 	if code != 0 || !strings.Contains(out, "pawl: precommit passed") || strings.Contains(out, "ring ran") {
@@ -263,15 +234,28 @@ func TestRunReachesTheRunner(t *testing.T) {
 	}
 }
 
-func TestCheckIsTheGate(t *testing.T) {
-	t.Setenv("MAKELEVEL", "")
+func TestRunCheckIsTheGate(t *testing.T) {
 	root := ringRepo(t)
-	out, stderr, code := pawl(t, root, "check", "--no-toolbox")
+	out, stderr, code := pawl(t, root, "run", "check", "--no-toolbox")
 	if code != 1 || !strings.Contains(out, "pawl: check failed") || !strings.Contains(out, "--- lint-b") || !strings.Contains(out, "b is broken") {
 		t.Errorf("check runs the check ring: %d %q %q", code, out, stderr)
 	}
 	if strings.Contains(out, "a is fine") {
 		t.Errorf("the output of a passing step is shown:\n%s", out)
+	}
+}
+
+func TestCheckWasRemoved(t *testing.T) {
+	root := ringRepo(t)
+	for _, args := range [][]string{{"check"}, {"check", "--no-toolbox"}} {
+		out, stderr, code := pawl(t, root, args...)
+		want := `pawl: pawl check was removed: run "pawl run check" (the gate, through make) or "pawl verify" (the verification)`
+		if code != 1 || out != "" || strings.TrimSpace(stderr) != want {
+			t.Errorf("%v: %d %q %q", args, code, out, stderr)
+		}
+	}
+	if out, _, _ := pawl(t, root, "--help"); strings.Contains(out, "\n  check ") {
+		t.Errorf("help lists the removed check command:\n%s", out)
 	}
 }
 
@@ -319,16 +303,7 @@ func TestRunRejectsAMissingTargetAndBadArguments(t *testing.T) {
 
 func TestInitNamesTheNextCommands(t *testing.T) {
 	out, stderr, code := pawl(t, goRepo(t), "init")
-	if code != 0 || !strings.Contains(out, "next: `pawl install` (the pinned tools), `pawl run lint`, `pawl baseline` (records the debt of today), `pawl check`, then commit.") {
+	if code != 0 || !strings.Contains(out, "next: `pawl install` (make and mise when missing, the pinned tools), `pawl run lint`, `pawl baseline` (records the debt of today), `pawl run check`, then commit.") {
 		t.Errorf("init (%d): %s%s", code, out, stderr)
 	}
-}
-
-func readFile(t *testing.T, root, rel string) string {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(root, rel))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(raw)
 }

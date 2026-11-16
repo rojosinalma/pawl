@@ -113,10 +113,13 @@ func TestGenerateHasEveryTargetAndParses(t *testing.T) {
 			t.Errorf("generated Makefile lacks %s", target)
 		}
 	}
-	if !m.Reaches("check", "lint") || !m.Reaches("check", "$(PAWL) verify") || !m.Reaches("nightly", "coverage") {
+	if !m.Reaches("check", "lint") || !m.Reaches("check", "@$(call pawl_run,verify)") || !m.Reaches("nightly", "coverage") {
 		t.Error("generated dependency graph is wrong")
 	}
-	for target, want := range map[string]string{"check": "$(PAWL) verify", "precommit": "$(PAWL) verify --ring precommit", "nightly": "$(PAWL) verify --ring nightly"} {
+	for target, want := range map[string]string{
+		"check": "@$(call pawl_run,verify)", "precommit": "@$(call pawl_run,verify --ring precommit)",
+		"nightly": "@$(call pawl_run,budget)", "test": "@$(call pawl_guard,:,every test runs)",
+	} {
 		if got := m.Targets[target].Recipe; !slices.Contains(got, want) {
 			t.Errorf("%s recipe %v lacks %q", target, got, want)
 		}
@@ -131,6 +134,17 @@ func TestGenerateHasEveryTargetAndParses(t *testing.T) {
 		if strings.HasPrefix(line, "    ") {
 			t.Errorf("recipe indented with spaces: %q", line)
 		}
+	}
+}
+
+func TestParseReadsTheGuardMacrosAsDefinitions(t *testing.T) {
+	m := Parse(Generate([]stack.Adapter{fakeAdapter{}}, stack.Params{}, 80, "origin/main"))
+	guard := m.Defines["pawl_guard"]
+	if !strings.HasPrefix(guard, "define pawl_guard\n") || !strings.HasSuffix(guard, "endef\n") || strings.Count(guard, "\n") != 3 {
+		t.Errorf("pawl_guard = %q", guard)
+	}
+	if m.Vars["pawl_run"] != "$(call pawl_guard,$(PAWL) $(1),skipped: pawl $(1))" {
+		t.Errorf("pawl_run = %q", m.Vars["pawl_run"])
 	}
 }
 
@@ -152,8 +166,11 @@ func TestMergeAddsOnlyMissingTargets(t *testing.T) {
 	if strings.Count(merged, "\ncheck:") != 1 {
 		t.Error("check target duplicated")
 	}
-	if m.Vars["FAKE"] != "fake" || m.Vars["GO"] != "go" {
+	if m.Vars["FAKE"] != "fake" || m.Vars["GO"] != "go" || m.Vars["pawl_run"] == "" {
 		t.Errorf("Vars = %v", m.Vars)
+	}
+	if strings.Count(merged, "\ndefine pawl_guard\n") != 1 || m.Defines["pawl_guard"] != Parse(generated).Defines["pawl_guard"] {
+		t.Errorf("merged Makefile lacks the guard macro the appended targets call:\n%s", merged)
 	}
 	if again := Merge(merged, generated); again != merged {
 		t.Error("Merge is not idempotent")

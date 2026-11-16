@@ -37,7 +37,7 @@ func Git(t testing.TB, dir string, args ...string) {
 func Isolate(t testing.TB) {
 	t.Helper()
 	// the make variables too: a test that starts make must not inherit the flags of the make that runs the tests
-	for _, name := range []string{"PAWL_BASE", "PAWL_FULL", "PAWL_VERBOSE", "PAWL_WORK_TYPE", "MAKEFLAGS", "MFLAGS", "MAKELEVEL"} {
+	for _, name := range []string{"PAWL_BASE", "PAWL_FULL", "PAWL_VERBOSE", "PAWL_WORK_TYPE", "PAWL_REQUIRED", "MAKEFLAGS", "MFLAGS", "MAKELEVEL"} {
 		t.Setenv(name, "")
 	}
 }

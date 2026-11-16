@@ -19,7 +19,6 @@ import (
 	"github.com/rojosinalma/pawl/internal/affected"
 	"github.com/rojosinalma/pawl/internal/catalog"
 	"github.com/rojosinalma/pawl/internal/checks"
-	"github.com/rojosinalma/pawl/internal/config"
 	"github.com/rojosinalma/pawl/internal/doctor"
 	"github.com/rojosinalma/pawl/internal/ghx"
 	"github.com/rojosinalma/pawl/internal/install"
@@ -39,8 +38,8 @@ var errFindings = errors.New("findings")
 // ringNames are the rings `pawl run` accepts, from the fastest to the slowest.
 var ringNames = []string{string(catalog.Precommit), string(catalog.Check), string(catalog.Nightly)}
 
-// oldRecipeNote is printed when a v0.1 Makefile's check recipe calls `pawl check`, which is now the gate itself.
-const oldRecipeNote = `pawl: this Makefile calls "pawl check"; change the recipe to "pawl verify"`
+// errCheckRemoved is what the removed `pawl check` says: the gate and the verification each have one command now.
+var errCheckRemoved = errors.New(`pawl check was removed: run "pawl run check" (the gate, through make) or "pawl verify" (the verification)`)
 
 // Execute runs the command line and returns the exit code.
 func Execute(version string, args []string, stdout, stderr io.Writer) int {
@@ -137,7 +136,7 @@ func (a *app) printInit(res *scaffold.Result) {
 			fmt.Fprintf(a.stdout, "  %s\n", h)
 		}
 	}
-	fmt.Fprintln(a.stdout, "\nnext: `pawl install` (the pinned tools), `pawl run lint`, `pawl baseline` (records the debt of today), `pawl check`, then commit.")
+	fmt.Fprintln(a.stdout, "\nnext: `pawl install` (make and mise when missing, the pinned tools), `pawl run lint`, `pawl baseline` (records the debt of today), `pawl run check`, then commit.")
 }
 
 func (a *app) installCmd() *cobra.Command {
@@ -195,12 +194,6 @@ func (a *app) printSteps(res *install.Result) {
 	}
 }
 
-// ringFlags are the options `pawl run` and `pawl check` share.
-func ringFlags(cmd *cobra.Command, opts *ringrun.Options) {
-	cmd.Flags().BoolVar(&opts.Verbose, "verbose", false, "stream make's own output instead of the summary")
-	cmd.Flags().BoolVar(&opts.NoToolbox, "no-toolbox", false, "run make on this machine even when git config pawl.toolbox names an image")
-}
-
 func (a *app) runCmd() *cobra.Command {
 	var opts ringrun.Options
 	cmd := &cobra.Command{
@@ -216,29 +209,19 @@ func (a *app) runCmd() *cobra.Command {
 			return a.runRing(cmd.Context(), args[0], opts)
 		},
 	}
-	ringFlags(cmd, &opts)
+	cmd.Flags().BoolVar(&opts.Verbose, "verbose", false, "stream make's own output instead of the summary")
+	cmd.Flags().BoolVar(&opts.NoToolbox, "no-toolbox", false, "run make on this machine even when git config pawl.toolbox names an image")
 	return cmd
 }
 
+// checkCmd is the removed `pawl check`, hidden: it only says which command replaces it, whatever the arguments.
 func (a *app) checkCmd() *cobra.Command {
-	var opts ringrun.Options
-	cmd := &cobra.Command{
-		Use:   "check",
-		Short: "The merge gate: lint, tests and the catalog verification (pawl run check)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			// A v0.1 Makefile's check recipe calls `pawl check`; running the gate from there would start make again
-			// and never end. Called by that recipe, the command gives it the verification it wants, with a note
-			// to fix it. A call from any other make recipe is an ordinary run of the gate.
-			if config.InsideMake() && checks.CallsOldCheck(a.dir) {
-				fmt.Fprintln(a.stderr, oldRecipeNote)
-				return a.verify(string(catalog.Check), nil, "text")
-			}
-			return a.runRing(cmd.Context(), string(catalog.Check), opts)
-		},
+	return &cobra.Command{
+		Use:                "check",
+		Hidden:             true,
+		DisableFlagParsing: true,
+		RunE:               func(*cobra.Command, []string) error { return errCheckRemoved },
 	}
-	ringFlags(cmd, &opts)
-	return cmd
 }
 
 // runRing runs one ring with the project's pinned tools on PATH; a failing ring is exit code 1 without an error

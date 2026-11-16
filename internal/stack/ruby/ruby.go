@@ -259,7 +259,8 @@ func (Adapter) Make(p stack.Params) stack.Make {
 	helper := "test/test_helper.rb"
 	if p.Facts["test_framework"] == "rspec" {
 		test = "bundle exec rspec --order random $(RUBY_TEST_SCOPE)"
-		scope = "RUBY_TEST_SCOPE ?= $(shell $(PAWL) affected ruby 2>/dev/null)"
+		// without pawl (or when it fails) the scope is empty, and rspec without arguments runs every spec
+		scope = "RUBY_TEST_SCOPE ?= $(shell $(PAWL) affected ruby 2>/dev/null || true)"
 		mutation = "bundle exec mutant run --integration rspec"
 		helper = "spec/spec_helper.rb"
 	}

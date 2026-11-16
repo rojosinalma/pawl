@@ -190,7 +190,8 @@ func (Adapter) Make(stack.Params) stack.Make {
 	return stack.Make{
 		Vars: []string{
 			"CLIPPY_LINTS ?= " + strings.Join(clippyLints, " "),
-			"CARGO_TEST_SCOPE ?= $(shell $(PAWL) affected rust 2>/dev/null)",
+			// without pawl (or when it fails) every crate of the workspace, not only the root package
+			"CARGO_TEST_SCOPE ?= $(shell $(PAWL) affected rust 2>/dev/null || echo --workspace)",
 			"STAGED_RS := $(filter %.rs,$(STAGED))",
 		},
 		Fmt:      []string{"cargo fmt --all"},

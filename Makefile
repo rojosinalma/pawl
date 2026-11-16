@@ -25,8 +25,16 @@ WORKFLOWS := $(wildcard .github/workflows/*.yml .github/workflows/*.yaml)
 BATS_FILES := $(filter %.bats,$(SH_FILES))
 STAGED_SH := $(filter $(SH_FILES),$(STAGED))
 
+# Pawl is optional: every target works without it. Without pawl, $(call pawl_run,<args>) skips `pawl <args>`
+# with a warning and `make test` runs every test; PAWL_REQUIRED=1 (the CI workflows set it) makes that an error.
+# $(call pawl_guard,<command run when pawl is installed>,<what happens instead, for the warning>)
+define pawl_guard
+if command -v $(firstword $(PAWL)) >/dev/null 2>&1; then $(1); elif [ "$(PAWL_REQUIRED)" = 1 ]; then echo "make $@: pawl is not installed and PAWL_REQUIRED=1" >&2; exit 1; else echo "make $@: warning: pawl is not installed; $(2)" >&2; fi
+endef
+pawl_run = $(call pawl_guard,$(PAWL) $(1),skipped: pawl $(1))
+
 check: lint test  ## the merge gate: lint, tests, then the catalog verification
-	$(PAWL) verify
+	@$(call pawl_run,verify)
 
 fmt:  ## rewrite files with the formatters
 	golangci-lint fmt $(GO_PKGS)
@@ -73,6 +81,7 @@ lint-docker-user:  ## one step of lint
 	@s=0; for f in $(DOCKERFILES); do grep -qiE '^[[:space:]]*USER[[:space:]]' "$$f" || { echo "$$f: no USER instruction, the container runs as root (docker-user)"; s=1; }; done; exit $$s
 
 test:  ## the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope
+	@$(call pawl_guard,:,every test runs)
 	go test -shuffle=on -race -count=1 $(GO_TEST_SCOPE)
 	@[ -z "$(BATS_FILES)" ] || bats $(BATS_FILES)
 
@@ -82,7 +91,7 @@ precommit:  ## staged files only, under ten seconds; run by the git hook
 	@[ -z "$(STAGED_GO)" ] || golangci-lint run --fast-only $(addprefix ./,$(sort $(dir $(STAGED_GO))))
 	@[ -z "$(STAGED_SH)" ] || shfmt -d $(STAGED_SH)
 	@[ -z "$(STAGED_SH)" ] || shellcheck $(STAGED_SH)
-	$(PAWL) verify --ring precommit
+	@$(call pawl_run,verify --ring precommit)
 
 coverage:  ## tests with coverage; changed lines must reach DIFF_COVERAGE percent
 	@mkdir -p $(REPORTS)
@@ -97,8 +106,8 @@ mutation:  ## mutation testing on the change (nightly)
 	gremlins unleash --threshold-efficacy $(MUTATION_SCORE)
 
 nightly: check coverage audit mutation  ## everything, including the slow rings
-	$(PAWL) verify --ring nightly
-	$(PAWL) budget
+	@$(call pawl_run,verify --ring nightly)
+	@$(call pawl_run,budget)
 
 # --- this repository's own targets ---
 TOOLBOX_IMAGE ?= pawl-toolbox:dev
@@ -141,4 +150,4 @@ e2e-project-pawl:  ## the same new project through pawl alone: install (mise, to
 	cd "$(E2E_PROJECT)" && "$(CURDIR)/pawl" install
 	cd "$(E2E_PROJECT)" && PAWL="$(CURDIR)/pawl" "$(CURDIR)/pawl" run lint --no-toolbox
 	cd "$(E2E_PROJECT)" && git add -A && "$(CURDIR)/pawl" baseline
-	cd "$(E2E_PROJECT)" && PAWL="$(CURDIR)/pawl" "$(CURDIR)/pawl" check --no-toolbox
+	cd "$(E2E_PROJECT)" && PAWL="$(CURDIR)/pawl" "$(CURDIR)/pawl" run check --no-toolbox
