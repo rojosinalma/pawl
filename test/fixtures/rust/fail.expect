@@ -1,0 +1,12 @@
+/src/main.rs:2:
+index.html#needless_return
+index.html#print_stdout
+unused `std::result::Result` that must be used
+index.html#let_underscore_must_use
+index.html#map_err_ignore
+index.html#cognitive_complexity
+index.html#unwrap_used
+error[config-owner-rs]
+error[bounded-growth-rs]
+error[skip-without-reason-rs]
+cargo-machete found the following unused dependencies

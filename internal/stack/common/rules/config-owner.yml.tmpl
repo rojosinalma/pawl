@@ -60,5 +60,7 @@ rule:
     - pattern: env::var($KEY)
     - pattern: std::env::var_os($KEY)
     - pattern: env::var_os($KEY)
+    - pattern: std::env::vars()
+    - pattern: env::vars()
 files: ["**/*.rs"]
 ignores: ["**/tests/**", "build.rs"{{if .ConfigModule}}, "{{.ConfigModule}}/**", "{{.ConfigModule}}.rs"{{end}}]

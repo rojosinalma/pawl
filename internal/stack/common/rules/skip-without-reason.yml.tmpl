@@ -14,8 +14,10 @@ id: skip-without-reason-rs
 language: Rust
 severity: error
 message: '#[ignore] without a reason hides a test; use #[ignore = "reason"].'
+# the pattern "#[ignore]" also matches #[ignore = "reason"], so the rule compares the attribute text
 rule:
-  pattern: "#[ignore]"
+  kind: attribute_item
+  regex: '^#\[\s*ignore\s*\]$'
 files: ["**/*.rs"]
 ---
 id: skip-without-reason-py

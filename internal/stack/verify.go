@@ -118,9 +118,45 @@ func StripJSONC(raw []byte) []byte {
 			out = append(out, c)
 		}
 	}
-	// trailing commas before } or ]
-	re := regexp.MustCompile(`,(\s*[}\]])`)
-	return re.ReplaceAll(out, []byte("$1"))
+	return dropTrailingCommas(out)
+}
+
+// dropTrailingCommas removes a comma followed only by whitespace and a closing } or ], outside strings.
+func dropTrailingCommas(raw []byte) []byte {
+	var out []byte
+	inString := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch {
+		case inString:
+			if c == '\\' && i+1 < len(raw) {
+				out = append(out, c, raw[i+1])
+				i++
+				continue
+			}
+			inString = c != '"'
+		case c == '"':
+			inString = true
+		case c == ',' && closesNext(raw[i+1:]):
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// closesNext reports whether the first non-space byte is } or ].
+func closesNext(rest []byte) bool {
+	for _, c := range rest {
+		switch c {
+		case ' ', '\t', '\n', '\r':
+			continue
+		case '}', ']':
+			return true
+		}
+		return false
+	}
+	return false
 }
 
 // Get returns the value at a dotted path ("linter.rules.suspicious.noConsole"); list indexes are numeric segments.

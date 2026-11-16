@@ -92,6 +92,7 @@ rule:
   pattern: "static $NAME: $T = $V;"
 constraints:
   T:
-    regex: "Mutex|RwLock|Lazy|OnceLock|OnceCell|RefCell"
+    # a lock or lazy cell around a growable collection; a lazily built value of fixed size is not flagged
+    regex: "(Mutex|RwLock|RefCell|Lazy\\w*|OnceLock|OnceCell)<.*(Vec|VecDeque|HashMap|BTreeMap|HashSet|BTreeSet|String)\\b"
 files: ["**/*.rs"]
 ignores: ["**/tests/**"]

@@ -46,8 +46,10 @@ func (Adapter) Tools() []stack.Tool {
 	}
 }
 
-func (Adapter) SourceGlobs() []string { return append(append([]string{}, scriptGlobs...), dockerGlobs...) }
-func (Adapter) TestGlobs() []string   { return []string{"**/*.bats", "test/**", "tests/**"} }
+func (Adapter) SourceGlobs() []string {
+	return append(append([]string{}, scriptGlobs...), dockerGlobs...)
+}
+func (Adapter) TestGlobs() []string { return []string{"**/*.bats", "test/**", "tests/**"} }
 
 func (Adapter) Pins() []stack.Pin {
 	return []stack.Pin{{What: "tool versions for shell, Docker and Actions linters (mise.toml)", Files: []string{"mise.toml", ".tool-versions"}}}

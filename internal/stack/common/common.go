@@ -157,7 +157,7 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 		"speed.rings":         pawl,
 		"speed.affected":      pawl,
 		"tests.principles":    pawl,
-		"code.naming":          {Step: "lint", Via: []string{"typos"}},
+		"code.naming":         {Step: "lint", Via: []string{"typos"}},
 	}
 }
 
