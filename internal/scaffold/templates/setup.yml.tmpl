@@ -1,0 +1,40 @@
+[[define "setup"]]
+      - uses: [[uses "actions/checkout"]]
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+[[- if .Go]]
+      - uses: [[uses "actions/setup-go"]]
+        with:
+          go-version-file: go.mod
+[[- end]]
+[[- if .Ruby]]
+      - uses: [[uses "ruby/setup-ruby"]]
+        with:
+          bundler-cache: true
+[[- end]]
+[[- if .UV]]
+      - uses: [[uses "astral-sh/setup-uv"]]
+[[- end]]
+[[- if .Bun]]
+      - uses: [[uses "oven-sh/setup-bun"]]
+[[- if .BunVersionFile]]
+        with:
+          bun-version-file: [[.BunVersionFile]]
+[[- end]]
+[[- end]]
+[[- if .Rust]]
+      - name: Install the Rust toolchain of rust-toolchain.toml
+        run: rustup toolchain install
+[[- end]]
+      - uses: [[uses "jdx/mise-action"]]
+      - name: Install pawl
+        run: |
+          mkdir -p "${HOME}/.local/bin"
+          curl -fsSL [[.PawlURL]] | tar -xz -C "${HOME}/.local/bin" pawl
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+[[- if .Bun]]
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+[[- end]]
+[[- end]]
