@@ -1,0 +1,29 @@
+# pawl rule pack: tests.smells. A skipped test carries a reason.
+id: skip-without-reason-go
+language: Go
+severity: error
+message: t.Skip without a reason hides a test; use t.Skip("reason") or t.Skipf.
+rule:
+  any:
+    - pattern: $T.Skip()
+    - pattern: $T.SkipNow()
+files: ["**/*_test.go"]
+---
+id: skip-without-reason-rs
+language: Rust
+severity: error
+message: '#[ignore] without a reason hides a test; use #[ignore = "reason"].'
+rule:
+  pattern: "#[ignore]"
+files: ["**/*.rs"]
+---
+id: skip-without-reason-py
+language: Python
+severity: error
+message: A skip marker without a reason hides a test; use pytest.mark.skip(reason="...").
+rule:
+  any:
+    - pattern: pytest.mark.skip()
+    - pattern: pytest.skip()
+    - pattern: unittest.skip()
+files: ["**/test_*.py", "**/*_test.py", "**/tests/**/*.py"]

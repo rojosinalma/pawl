@@ -1,0 +1,43 @@
+# pawl rule pack: tests.mock-edges. Tests fake external edges, never the repository's own modules.
+id: mock-own-module-ts
+language: TypeScript
+severity: error
+message: A test mocks a module of this repository. Fake the external edge (HTTP, database driver, clock) instead.
+rule:
+  any:
+    - pattern: mock.module($P, $$$)
+    - pattern: vi.mock($P, $$$)
+    - pattern: jest.mock($P, $$$)
+constraints:
+  P:
+    regex: '^["''`]\.'
+files: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/test/**", "**/tests/**"]
+{{if .OwnModule}}---
+id: mock-own-module-py
+language: Python
+severity: error
+message: A test patches a module of this repository ({{.OwnModule}}). Fake the external edge instead.
+rule:
+  any:
+    - pattern: patch($T, $$$)
+    - pattern: mock.patch($T, $$$)
+    - pattern: patch.object($T, $$$)
+    - pattern: mocker.patch($T, $$$)
+constraints:
+  T:
+    regex: '^["'']{{.OwnModule}}'
+files: ["**/test_*.py", "**/*_test.py", "**/tests/**/*.py"]
+---
+id: mock-own-module-rb
+language: Ruby
+severity: error
+message: A test stubs a module of this repository ({{.OwnModule}}). Fake the external edge instead.
+rule:
+  any:
+    - pattern: allow($T).to receive($$$)
+    - pattern: $T.stub($$$)
+constraints:
+  T:
+    regex: '^{{.OwnModule}}'
+files: ["**/*_test.rb", "**/*_spec.rb"]
+{{end}}

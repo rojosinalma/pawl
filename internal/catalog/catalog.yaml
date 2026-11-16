@@ -1,0 +1,359 @@
+# The pawl catalog: abstract quality rules. A rule names what must hold, never a tool. Adapters (internal/stack)
+# say which tool enforces each rule for a stack; the manifest (pawl.toml) says what a project does about it.
+#
+# class: hygiene | escape | repo | resilience | tests | drift | speed | review
+# ring:  which ring normally runs the enforcement: precommit | check | nightly
+# generic: true when pawl itself implements the check (no adapter needed)
+# review rules are always waived; their `guidance` is the generated checklist. `source` cites the upstream guide.
+
+rules:
+  # --- hygiene -----------------------------------------------------------------------------------------------------
+  - id: code.format
+    class: hygiene
+    ring: precommit
+    title: "One formatter, and the tree is clean"
+    statement: "Every source file is formatted by the stack's formatter; `make fmt` rewrites, `make fmt-check` fails on a diff."
+
+  - id: code.lint
+    class: hygiene
+    ring: check
+    title: "The stack's linter passes with the project's configuration"
+    statement: "The linter runs on the whole tree in `make lint`; its configuration enables the rules the catalog needs."
+
+  - id: code.types
+    class: hygiene
+    ring: check
+    title: "The strictest type level the stack offers"
+    statement: "Type checking runs in strict mode; no implicit any, no untyped definitions, no unchecked casts."
+
+  - id: code.complexity
+    class: hygiene
+    ring: check
+    title: "Function complexity within budget"
+    statement: "Cognitive or cyclomatic complexity per function stays under `budgets.complexity`; the linter fails above it."
+
+  - id: code.file-size
+    class: hygiene
+    ring: check
+    generic: true
+    title: "Files within the line budget, shrink-only"
+    statement: "A source file has at most `budgets.file_lines` lines; the list of oversized files is a ratchet."
+
+  - id: code.boundaries
+    class: hygiene
+    ring: check
+    title: "Layers import one way"
+    statement: "Imports follow the declared layering; the SDK, the database and the transport each live in one place."
+
+  - id: code.dead
+    class: hygiene
+    ring: check
+    title: "No dead exports or unused code"
+    statement: "Every exported symbol, function and variable is used; the tool fails on an unused one."
+
+  - id: code.dropped-results
+    class: hygiene
+    ring: check
+    title: "Every error and async result is handled"
+    statement: "A returned error or promise is handled, returned, or dropped with a reason in the code; never ignored silently."
+
+  - id: code.swallowed-errors
+    class: hygiene
+    ring: check
+    title: "No swallowed exception, no silent default"
+    statement: "A handler that catches everything either re-raises, or records and isolates at a program boundary; empty handlers fail."
+
+  - id: code.debug-leftovers
+    class: hygiene
+    ring: check
+    title: "No debug output, commented-out code or dangling TODO in production code"
+    statement: "Print statements, commented-out code and TODO comments without an issue link fail outside tests."
+
+  - id: code.naming
+    class: hygiene
+    ring: check
+    title: "Names follow the stack's convention and are spelled correctly"
+    statement: "The naming lint of the stack is on; identifiers pass a spell check with the project dictionary."
+
+  # --- escape hatches ----------------------------------------------------------------------------------------------
+  - id: escape.suppressions
+    class: escape
+    ring: precommit
+    generic: true
+    title: "Every suppression carries a reason, and the count only shrinks"
+    statement: "Lint suppressions, type ignores and unsafe casts are counted; each has a reason after the directive; the total is a ratchet."
+
+  - id: escape.duplication
+    class: escape
+    ring: check
+    title: "Copy-paste blocks never increase"
+    statement: "Duplicated blocks found by the duplication tool are a ratchet metric."
+
+  - id: escape.test-branch
+    class: escape
+    ring: check
+    title: "No test-only branch in production code"
+    statement: "Production code never checks whether it runs under tests."
+
+  # --- the repository ----------------------------------------------------------------------------------------------
+  - id: repo.private
+    class: repo
+    ring: precommit
+    generic: true
+    title: "Nothing private in the repository"
+    statement: "No secret, token, private host, address or name from the forbidden list appears in tracked files or history."
+
+  - id: repo.pinned
+    class: repo
+    ring: check
+    generic: true
+    title: "Toolchain and dependencies pinned"
+    statement: "The runtime version is pinned in the stack's native file and the lockfile is committed; installs are frozen."
+
+  - id: repo.hook
+    class: repo
+    ring: check
+    generic: true
+    title: "The pre-commit hook is installed"
+    statement: "`.githooks/pre-commit` exists, is executable, runs `make precommit`, and `core.hooksPath` points at it."
+
+  - id: repo.targets
+    class: repo
+    ring: check
+    generic: true
+    title: "The standard make targets exist"
+    statement: "`make check`, `make fmt`, `make lint`, `make test` and `make precommit` exist; `make check` runs `pawl check`."
+
+  - id: repo.ci-shape
+    class: repo
+    ring: check
+    generic: true
+    title: "CI runs the make targets, actions are pinned"
+    statement: "Workflow steps run make targets or pawl; every action is pinned to a commit; workflows pass actionlint and zizmor."
+
+  # --- resilience --------------------------------------------------------------------------------------------------
+  - id: resilience.timeouts
+    class: resilience
+    ring: check
+    title: "Every outbound call has a timeout"
+    statement: "HTTP clients, sockets and subprocesses are created with a timeout or a cancellable context."
+
+  - id: resilience.exhaustive
+    class: resilience
+    ring: check
+    title: "A switch over a closed set handles every case"
+    statement: "Matching on an enum or union is exhaustive; the compiler or linter fails on a missing case."
+
+  - id: resilience.config-owner
+    class: resilience
+    ring: check
+    title: "Configuration is read in one module"
+    statement: "The environment and settings are read only in `project.config_module`; every key has a documented default."
+
+  - id: resilience.import-cycles
+    class: resilience
+    ring: check
+    title: "No import cycles"
+    statement: "The module graph is acyclic."
+
+  - id: resilience.bounded-growth
+    class: resilience
+    ring: check
+    title: "Nothing grows without a bound"
+    statement: "Module-scope collections, caches, pools and queues have a cap, a TTL or an eviction rule, or are marked bounded with a reason."
+
+  # --- tests -------------------------------------------------------------------------------------------------------
+  - id: tests.runner
+    class: tests
+    ring: check
+    title: "Tests run in random order, without retries"
+    statement: "The test runner shuffles, never retries, and has no network unless a test declares it."
+
+  - id: tests.smells
+    class: tests
+    ring: check
+    title: "No focused, skipped or assertion-free test"
+    statement: "Focused and skipped tests fail the lint unless they carry a reason; every test asserts."
+
+  - id: tests.diff-coverage
+    class: tests
+    ring: check
+    title: "Changed lines are covered"
+    statement: "The lines a change touches are covered by tests at `budgets.diff_coverage` percent or more."
+
+  - id: tests.mutation
+    class: tests
+    ring: nightly
+    title: "Mutation score never drops"
+    statement: "The mutation testing score on the changed files is a ratchet, run nightly."
+
+  - id: tests.mock-edges
+    class: tests
+    ring: check
+    title: "Tests fake only the edges"
+    statement: "Tests may replace external edges (HTTP, database driver, clock); they never mock the repository's own modules."
+
+  - id: tests.principles
+    class: tests
+    ring: check
+    title: "Every declared principle has a required test suite"
+    statement: "Each principle in `pawl.toml` names a suite that exists and that `make test` runs."
+
+  # --- drift -------------------------------------------------------------------------------------------------------
+  - id: drift.audit
+    class: drift
+    ring: nightly
+    title: "Dependencies audited for known vulnerabilities"
+    statement: "The stack's audit tool runs against the lockfile; a known vulnerability fails."
+
+  - id: drift.unused-deps
+    class: drift
+    ring: check
+    title: "No unused or undeclared dependency"
+    statement: "Every declared dependency is imported and every import is declared."
+
+  - id: drift.contracts
+    class: drift
+    ring: check
+    title: "Contracts change only with a version bump"
+    statement: "A wire schema, public API or database schema listed in `pawl.toml` passes a breaking-change check and bumps its version."
+
+  - id: drift.docs
+    class: drift
+    ring: nightly
+    title: "The documented surface matches the code"
+    statement: "Every route, command and tool appears in the documentation; every `--help` works."
+
+  - id: drift.pr-size
+    class: drift
+    ring: check
+    generic: true
+    title: "Pull request size matches the declared work type"
+    statement: "Changed lines stay under `budgets.pr_lines` for the work type (feature, bugfix, hotfix, refactor); a bugfix names its failing test."
+
+  - id: drift.security
+    class: drift
+    ring: check
+    title: "Security lint per stack"
+    statement: "Injection, shell with interpolation, weak cryptography and unsafe deserialization fail the lint."
+
+  # --- speed -------------------------------------------------------------------------------------------------------
+  - id: speed.rings
+    class: speed
+    ring: nightly
+    generic: true
+    title: "Each ring runs within its budget"
+    statement: "The median wall time of the last ten runs of each ring stays under its target; over its limit fails."
+
+  - id: speed.affected
+    class: speed
+    ring: check
+    generic: true
+    title: "The pull request ring runs what the change affects"
+    statement: "Tests and checks in the pull request ring are scoped to the affected packages; configuration changes run everything."
+
+  # --- review: what no tool reaches ---------------------------------------------------------------------------------
+  - id: review.simplest
+    class: review
+    title: "The simplest thing that works"
+    statement: "No abstraction before the second concrete case; no option, flag or layer for a need that does not exist yet."
+    guidance: "Prefer the smallest change that solves the task. An interface with one implementation, a helper with one caller and an unused option are signs of premature abstraction."
+
+  - id: review.abstraction
+    class: review
+    title: "The right abstraction"
+    statement: "Each unit has one responsibility; a unit that needs \"and\" to describe it wants a split."
+    guidance: "Name what a module owns in one sentence. If the sentence needs \"and\", split it."
+
+  - id: review.naming
+    class: review
+    title: "Names say what things are"
+    statement: "A name states the role, not the type or the history; booleans read as questions; functions start with a verb."
+    guidance: "Avoid Manager, Helper, Util, Data, Info and Misc. A boolean starts with is, has or can. A function starts with a verb."
+
+  - id: review.dependency
+    class: review
+    title: "A dependency earns its place"
+    statement: "The standard library is used when it covers the need; a library is added for real complexity, pinned, never vendored, and recorded with a reason."
+    guidance: "Before adding a package, say what it carries that the standard library does not, and record the decision."
+
+  - id: review.domain
+    class: review
+    title: "Domain correctness"
+    statement: "The code does what the domain needs, not only what the types allow."
+    guidance: "Check the behaviour against the requirement, not against the compiler. Property-based tests and characterisation snapshots keep the honest cases honest."
+
+  - id: review.consistency
+    class: review
+    title: "Be consistent with the surrounding code"
+    statement: "Where no tool or rule settles a style question, follow the file, then the directory; new files follow the standard."
+    guidance: "Consistency is not a reason to keep an old style when the codebase moves to a newer one."
+    source:
+      - repo: google/styleguide
+        ref: 0917409e4ed99f65d535f00f08342dc66a4d735e
+        path: "pyguide.md#4-parting-words"
+        license: CC-BY-3.0
+        modified: true
+      - repo: google/styleguide
+        ref: 0917409e4ed99f65d535f00f08342dc66a4d735e
+        path: "tsguide.md#consistency"
+        license: CC-BY-3.0
+        modified: true
+
+  - id: review.small-changes
+    class: review
+    title: "One self-contained change at a time"
+    statement: "A commit or pull request addresses one thing and carries its tests; err on the side of too small."
+    guidance: "Everything a reviewer needs is in the change, its description or the existing code."
+    source:
+      - repo: google/eng-practices
+        ref: 3bb3ec25b3b0199f4940b1aa75f0ac5c5753301c
+        path: "review/developer/small-cls.md#what-is-small"
+        license: CC-BY-3.0
+        modified: true
+
+  - id: review.errors
+    class: review
+    title: "Errors carry a reason"
+    statement: "An error names the operation that failed and why; it is handled where recovery is possible, returned otherwise."
+    guidance: "Catch-all handlers exist only to re-raise or to record and isolate at a boundary."
+    source:
+      - repo: go.googlesource.com/wiki
+        ref: fe2268bb04c953cd65bcae752e978912f5cbddaa
+        path: "CodeReviewComments.md#handle-errors"
+        license: CC-BY-4.0
+        modified: true
+      - repo: google/styleguide
+        ref: 0917409e4ed99f65d535f00f08342dc66a4d735e
+        path: "pyguide.md#24-exceptions"
+        license: CC-BY-3.0
+        modified: true
+
+  - id: review.global-state
+    class: review
+    title: "Avoid mutable global state"
+    statement: "Module-level values that change at run time make behaviour depend on call order and leak between tests."
+    guidance: "Pass state explicitly; keep module-level values constant."
+    source:
+      - repo: google/styleguide
+        ref: 0917409e4ed99f65d535f00f08342dc66a4d735e
+        path: "pyguide.md#25-mutable-global-state"
+        license: CC-BY-3.0
+        modified: true
+
+  - id: review.comments
+    class: review
+    title: "Comments document intent and public behaviour"
+    statement: "A declaration comment is a full sentence for the user of the code; a body comment explains why, never what."
+    guidance: "A comment that restates the code is removed."
+    source:
+      - repo: go.googlesource.com/wiki
+        ref: fe2268bb04c953cd65bcae752e978912f5cbddaa
+        path: "CodeReviewComments.md#comment-sentences"
+        license: CC-BY-4.0
+        modified: true
+      - repo: google/styleguide
+        ref: 0917409e4ed99f65d535f00f08342dc66a4d735e
+        path: "tsguide.md#jsdoc-versus-comments"
+        license: CC-BY-3.0
+        modified: true

@@ -1,0 +1,63 @@
+# pawl rule pack: resilience.config-owner. The environment is read only in the configuration module
+# ({{if .ConfigModule}}{{.ConfigModule}}{{else}}not declared: set project.config_module in pawl.toml{{end}}).
+id: config-owner-go
+language: Go
+severity: error
+message: Read the environment only in the configuration module ({{.ConfigModuleOrHint}}); pass the value in.
+rule:
+  any:
+    - pattern: os.Getenv($KEY)
+    - pattern: os.LookupEnv($KEY)
+    - pattern: os.Environ()
+files: ["**/*.go"]
+ignores: ["**/*_test.go"{{if .ConfigModule}}, "{{.ConfigModule}}/**"{{end}}]
+---
+id: config-owner-ts
+language: TypeScript
+severity: error
+message: Read the environment only in the configuration module ({{.ConfigModuleOrHint}}); pass the value in.
+rule:
+  any:
+    - pattern: process.env.$KEY
+    - pattern: process.env[$KEY]
+    - pattern: Bun.env.$KEY
+    - pattern: Bun.env[$KEY]
+    - pattern: import.meta.env.$KEY
+files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.js", "**/*.mjs"]
+ignores: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/*.config.*"{{if .ConfigModule}}, "{{.ConfigModule}}/**"{{end}}]
+---
+id: config-owner-py
+language: Python
+severity: error
+message: Read the environment only in the configuration module ({{.ConfigModuleOrHint}}); pass the value in.
+rule:
+  any:
+    - pattern: os.environ[$KEY]
+    - pattern: os.environ.get($$$)
+    - pattern: os.getenv($$$)
+files: ["**/*.py"]
+ignores: ["**/test_*.py", "**/*_test.py", "**/tests/**", "**/conftest.py"{{if .ConfigModule}}, "{{.ConfigModule}}/**"{{end}}]
+---
+id: config-owner-rb
+language: Ruby
+severity: error
+message: Read the environment only in the configuration module ({{.ConfigModuleOrHint}}); pass the value in.
+rule:
+  any:
+    - pattern: ENV[$KEY]
+    - pattern: ENV.fetch($$$)
+files: ["**/*.rb"]
+ignores: ["**/*_test.rb", "**/*_spec.rb", "**/test/**", "**/spec/**", "config.ru", "Rakefile", "**/Gemfile"{{if .ConfigModule}}, "{{.ConfigModule}}/**", "{{.ConfigModule}}.rb"{{end}}]
+---
+id: config-owner-rs
+language: Rust
+severity: error
+message: Read the environment only in the configuration module ({{.ConfigModuleOrHint}}); pass the value in.
+rule:
+  any:
+    - pattern: std::env::var($KEY)
+    - pattern: env::var($KEY)
+    - pattern: std::env::var_os($KEY)
+    - pattern: env::var_os($KEY)
+files: ["**/*.rs"]
+ignores: ["**/tests/**", "build.rs"{{if .ConfigModule}}, "{{.ConfigModule}}/**", "{{.ConfigModule}}.rs"{{end}}]

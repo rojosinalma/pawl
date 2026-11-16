@@ -1,0 +1,62 @@
+# pawl rule pack: escape.test-branch. Production code never checks whether it runs under tests.
+# Edit freely; `pawl rules sync` refreshes only files that still match what pawl wrote.
+id: test-branch-go
+language: Go
+severity: error
+message: Production code branches on the test environment. Inject the behaviour instead of detecting tests.
+rule:
+  any:
+    - pattern: testing.Testing()
+    - pattern: flag.Lookup("test.v")
+files: ["**/*.go"]
+ignores: ["**/*_test.go"{{range .TestDirs}}, "{{.}}/**"{{end}}]
+---
+id: test-branch-ts
+language: TypeScript
+severity: error
+message: Production code branches on the test environment. Inject the behaviour instead of detecting tests.
+rule:
+  any:
+    - pattern: process.env.NODE_ENV === "test"
+    - pattern: process.env.NODE_ENV == "test"
+    - pattern: process.env.NODE_ENV === 'test'
+    - pattern: process.env.NODE_ENV == 'test'
+    - pattern: process.env.BUN_ENV === "test"
+    - pattern: process.env.BUN_ENV === 'test'
+    - pattern: import.meta.env.MODE === "test"
+    - pattern: import.meta.env.MODE === 'test'
+files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.js", "**/*.mjs"]
+ignores: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/test/**", "**/tests/**"{{range .TestDirs}}, "{{.}}/**"{{end}}]
+---
+id: test-branch-py
+language: Python
+severity: error
+message: Production code branches on the test environment. Inject the behaviour instead of detecting tests.
+rule:
+  any:
+    - pattern: os.environ.get("PYTEST_CURRENT_TEST")
+    - pattern: os.getenv("PYTEST_CURRENT_TEST")
+    - pattern: '"pytest" in sys.modules'
+    - pattern: "'pytest' in sys.modules"
+    - pattern: os.getenv("ENV") == "test"
+    - pattern: os.environ.get("ENV") == "test"
+    - pattern: os.getenv("APP_ENV") == "test"
+    - pattern: os.environ.get("APP_ENV") == "test"
+files: ["**/*.py"]
+ignores: ["**/test_*.py", "**/*_test.py", "**/tests/**", "**/conftest.py"{{range .TestDirs}}, "{{.}}/**"{{end}}]
+---
+id: test-branch-rb
+language: Ruby
+severity: error
+message: Production code branches on the test environment. Inject the behaviour instead of detecting tests.
+rule:
+  any:
+    - pattern: Rails.env.test?
+    - pattern: ENV["RACK_ENV"] == "test"
+    - pattern: ENV['RACK_ENV'] == 'test'
+    - pattern: ENV["APP_ENV"] == "test"
+    - pattern: ENV['APP_ENV'] == 'test'
+    - pattern: ENV["RUBY_ENV"] == "test"
+    - pattern: ENV['RUBY_ENV'] == 'test'
+files: ["**/*.rb"]
+ignores: ["**/*_test.rb", "**/*_spec.rb", "**/test/**", "**/spec/**"{{range .TestDirs}}, "{{.}}/**"{{end}}]

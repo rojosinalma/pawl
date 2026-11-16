@@ -1,0 +1,206 @@
+# pawl: design
+
+A pawl is the small catch that lets a ratchet turn one way only. pawl makes a repository's own tooling enforce an
+abstract quality catalog, and makes the numbers that matter move one way only.
+
+## What it is
+
+1. A **catalog** of abstract rules, each with a check class. The rules say what must hold; they never name a tool.
+2. **Adapters** per stack (Go, TypeScript, Ruby, Python, Shell with Docker and GitHub Actions, Rust) that know which
+   native tool enforces each rule, how its configuration must look, and how to verify that configuration.
+3. A **manifest** (`pawl.toml`) in every project: each catalog rule is either enforced by a named step or waived with a
+   reason. `pawl check` fails when a rule has neither. "Tools over prose" is itself a check.
+4. A **ratchet**: a baseline of counts (suppressions, oversized files, duplicated blocks) that may only shrink.
+5. **make** as the entry point. `make check`, `make fmt`, `make lint`, `make test`, `make precommit`: the same names in
+   every repository, the body per stack, written by `pawl init` and owned by the project afterwards. pawl verifies
+   that the targets exist, run, and together enforce the catalog. It never owns them.
+6. **Three rings** with time budgets: the git hook (staged files, seconds), the pull request (affected, minutes),
+   nightly (everything slow). The agent never waits for a ring above the first.
+7. **Prose for what no tool reaches**, generated from the waived rules into the project's `AGENTS.md`, the
+   [standard](https://agents.md) place agents read. The budget is small because the tooling carries the rest.
+
+pawl is one static Go binary. The stack tools stay the stack's own (RuboCop, Biome, Ruff, golangci-lint, clippy,
+ShellCheck). Cross-stack needs use common tools: ast-grep for patterns, jscpd for duplication, gitleaks for secrets,
+typos for identifiers, diff-cover for changed-line coverage. pawl implements only what no tool does: the manifest, the
+ratchet, the ring budgets, the configuration verifiers, and a handful of text checks (forbidden names, pins,
+suppressions, file size, CI shape).
+
+## The catalog
+
+Every rule has an id (two words, dot separated), a class, a statement, and per stack an implementation or a reason
+why none exists. The catalog is embedded in the binary; `pawl rules` prints it with each rule's status in the current
+project. Classes:
+
+| Class | Rules | Who checks |
+|---|---|---|
+| hygiene | `code.format`, `code.lint`, `code.types`, `code.complexity`, `code.file-size`, `code.boundaries`, `code.dead`, `code.dropped-results`, `code.swallowed-errors`, `code.debug-leftovers`, `code.naming` | stack tools; pawl for `file-size` |
+| escape hatches | `escape.suppressions`, `escape.duplication`, `escape.test-branch` | pawl (suppressions, ratchet), jscpd, ast-grep |
+| hygiene of the repo | `repo.private`, `repo.pinned`, `repo.hook`, `repo.targets`, `repo.ci-shape` | gitleaks + pawl, pawl, pawl, pawl, pawl + actionlint + zizmor |
+| resilience | `resilience.timeouts`, `resilience.exhaustive`, `resilience.config-owner`, `resilience.import-cycles`, `resilience.bounded-growth` | stack tools, ast-grep |
+| tests | `tests.runner`, `tests.smells`, `tests.diff-coverage`, `tests.mutation`, `tests.mock-edges`, `tests.principles` | stack runners, stack linters, diff-cover, mutation tools, ast-grep, pawl |
+| drift | `drift.audit`, `drift.unused-deps`, `drift.contracts`, `drift.docs`, `drift.pr-size`, `drift.security` | stack audit tools, pawl, project extractors, pawl (gh), stack security linters |
+| speed | `speed.rings`, `speed.affected` | pawl |
+| review | `review.simplest`, `review.abstraction`, `review.naming`, `review.dependency`, `review.domain`, plus the upstream-sourced guidance (`review.consistency`, `review.small-changes`, `review.errors`, `review.global-state`, `review.comments`, and the stack ones) | nobody: these are the generated checklist |
+
+A rule of class `review` is always waived; its reason is the checklist text and names the upstream guide it was
+distilled from (repository, commit, section, license, marked as modified as CC BY requires).
+
+## The manifest
+
+`pawl.toml`, written by `pawl init`, owned by the project:
+
+```toml
+version = 1
+stacks = ["go", "shell"]
+base = "origin/main"
+
+[project]
+config_module = "internal/config"   # the one place that reads the environment
+own_module = "github.com/acme/app"  # what tests must not mock
+
+[budgets]
+file_lines = 800
+complexity = 15
+diff_coverage = 80
+[budgets.pr_lines]
+feature = 800
+bugfix = 200
+hotfix = 50
+refactor = 800
+
+[rings.precommit]
+target = "10s"
+limit = "20s"
+[rings.check]
+target = "10m"
+limit = "15m"
+[rings.nightly]
+target = "20m"
+limit = "30m"
+
+[rules."code.format"]
+step = "fmt-check"
+via = ["gofmt", "goimports"]
+
+[rules."code.types"]
+waived = "Ruby has no type checker in this project; Steep is an opt-in"
+```
+
+Each rule has exactly one of `step` (a make target reachable from `make check`, with optional `via`: the tool and rule
+that implement it) or `waived` (a reason). `pawl check` verifies: the manifest lists every catalog rule; every step is
+a make target; every `via` with a known verifier is really enabled in the tool's configuration (a `.golangci.yml` that
+disables `errcheck` fails `code.dropped-results` unless the rule is waived); every waiver has a reason.
+
+## The ratchet
+
+`.pawl/baseline.json` records counts per metric and, where it matters, the offenders:
+
+```json
+{ "version": 1, "metrics": { "escape.suppressions": 12, "code.file-size": 2, "escape.duplication": 3 },
+  "offenders": { "code.file-size": ["internal/legacy/big.go"] } }
+```
+
+`pawl check` computes the current values and compares them with the baseline at the base commit (the merge base with
+`base`; the working-tree file when there is none). A value above the baseline fails ("regression"). A value below fails
+too ("stale: run `pawl baseline` to record the improvement"), so the baseline only shrinks. `pawl baseline` writes the
+current values; `pawl baseline --grow "<reason>"` is the only way up, and the reason is kept in the file.
+
+Metrics in the first release: suppressions (every `nolint`, `biome-ignore`, `rubocop:disable`, `noqa`,
+`type: ignore`, `@ts-ignore`, `@ts-expect-error`, `as any`, `#[allow(...)]`, `shellcheck disable`, `ast-grep-ignore`
+counted; each needs a reason after the directive), oversized files (lines over `budgets.file_lines`), duplicated
+blocks (jscpd), `TODO` without a link.
+
+## Rings and budgets
+
+| Ring | Runs | Where | Target / limit |
+|---|---|---|---|
+| precommit | `make precommit`: format staged files, lint staged files, forbidden names, suppressions on staged files | `.githooks/pre-commit` (`core.hooksPath`) | 10 s / 20 s |
+| check | `make check`: lint, affected tests, `pawl check` | pull request workflow; `merge_group` when a queue exists | 10 min / 15 min |
+| nightly | `make check` with everything, plus mutation, audits, docs drift | nightly workflow on `main`; failures open issues | 20 min / 30 min |
+
+The hook records its wall time locally; the CI rings are read from the last ten completed runs on `main` through the
+GitHub API (setup steps excluded). The median above the target warns; above the limit fails `pawl budget`, which the
+nightly ring runs. A test that fails is never retried; `pawl` has no retry anywhere.
+
+`pawl affected` prints the test scope for the change against `base`: exact for Go (`go list -deps`) and Rust (`cargo
+metadata`), per changed file for the others, everything when a configuration, lockfile or workflow changed, or when
+`PAWL_FULL=1`. The Makefile uses it: `TEST_SCOPE ?= $(shell pawl affected go)`.
+
+## Commands
+
+| Command | Does |
+|---|---|
+| `pawl init` | detect stacks; write `pawl.toml`, the tool configurations that are missing, the make targets that are missing, `.githooks/pre-commit`, `.pawl/` (ast-grep pack, baseline), the workflows, the `AGENTS.md` block, `.gitignore` lines; print the waived rules to decide on |
+| `pawl check` | the catalog verification: manifest, targets, verifiers, text checks, ratchet; `--ring precommit` limits it to the fast checks on staged files; `--format text\|json\|sarif\|github` |
+| `pawl doctor` | every tool pinned and present at the pinned version; hook installed; `make` targets exist; `gh` present |
+| `pawl status` | the state of the current branch's pull request: failing check, the first file and line, the command that fixes it |
+| `pawl baseline` | record the current ratchet values (shrink); `--grow "reason"` to raise |
+| `pawl rules` | the catalog with each rule's status here; `pawl rules show <id>`; `pawl rules sync` refreshes the ast-grep pack |
+| `pawl affected` | the test scope of the change |
+| `pawl budget` | the ring medians against their budgets |
+| `pawl record` | used by the hook to store a ring's wall time |
+
+Output: one line per finding, `file:line: rule-id: message`, then the command that fixes it. Exit 0 or 1.
+
+## Adapters
+
+Each adapter answers, for its stack: detection; tools (name, pin file, version command); the configuration files it
+writes and the verifier for each rule; the make target bodies; the suppression patterns; the affected-set strategy.
+
+| | Go | TypeScript (Bun) | Ruby | Python | Shell, Docker, Actions | Rust |
+|---|---|---|---|---|---|---|
+| format | gofmt, goimports | Biome | RuboCop layout | Ruff format | shfmt | rustfmt |
+| lint | golangci-lint v2 | Biome, oxlint type-aware | RuboCop + performance | Ruff | ShellCheck, hadolint, actionlint, zizmor | clippy `-D warnings` |
+| types | compiler | tsc `--strict` | waived (Steep opt-in) | pyright strict | waived | compiler |
+| complexity | gocognit | Biome cognitive | RuboCop Metrics | Ruff C901 | waived | clippy cognitive |
+| boundaries | depguard | dependency-cruiser | packwerk (opt-in) | import-linter | waived | crate layout |
+| dead code | unused | knip | waived | vulture | SC2034 | `dead_code` deny |
+| dropped results | errcheck | oxlint no-floating-promises | waived | RUF006 | `set -euo pipefail` (ast-grep) | `unused_must_use` deny |
+| swallowed errors | errcheck, nilerr | noEmptyBlockStatements | Lint/SuppressedException | BLE001, S110, E722 | waived | `let_underscore_must_use` |
+| debug leftovers | forbidigo | noConsole | Lint/Debugger | T20, ERA, TD003 | waived | print_stdout, dbg_macro |
+| naming | revive var-naming, typos | useNamingConvention, typos | Naming/*, typos | N, typos | typos | rustc, typos |
+| tests | go test -shuffle | bun test | minitest (random) | pytest-randomly | bats (opt-in) | cargo test |
+| test smells | testifylint, ast-grep skip | noFocusedTests, noSkippedTests | rubocop-minitest | PT | waived | ast-grep ignore |
+| coverage | -coverprofile → diff-cover | --coverage lcov → diff-cover | simplecov → diff-cover | coverage xml → diff-cover | waived | cargo-llvm-cov → diff-cover |
+| mutation | gremlins | Stryker | mutant | mutmut | waived | cargo-mutants |
+| audit | govulncheck | bun audit | bundler-audit | pip-audit | waived | cargo-audit |
+| unused deps | go mod tidy -diff | knip | waived | deptry | waived | cargo-machete |
+| security | gosec | ast-grep pack | ast-grep pack | S (bandit) | ShellCheck | cargo-geiger |
+| pins | go.mod toolchain | .node-version or engines, bun.lock | .ruby-version, Gemfile.lock | .python-version, uv.lock | mise.toml or tool versions in the workflow | rust-toolchain.toml, Cargo.lock |
+
+"waived" in this table is the adapter's default; the project can enforce it with a tool of its own by editing the
+manifest.
+
+## What `pawl init` writes
+
+| File | Owner after init | Purpose |
+|---|---|---|
+| `pawl.toml` | project | the manifest |
+| `Makefile` | project | the five targets plus `fmt-check`, `coverage`; existing targets are never touched |
+| tool configurations (`.golangci.yml`, `biome.jsonc`, `.rubocop.yml`, `ruff.toml`, `pyrightconfig.json`, `.shellcheckrc`, `.editorconfig`, `.hadolint.yaml`, `.github/actionlint.yaml`, `.github/zizmor.yml`, `clippy.toml`, `.gitleaks.toml`, `.jscpd.json`, `.typos.toml`) | project | written only when missing |
+| `.pawl/sgconfig.yml`, `.pawl/rules/*.yml` | pawl, refreshed by `pawl rules sync` when unedited | the ast-grep pack, templated with `config_module` and `own_module` |
+| `.pawl/baseline.json` | project, through `pawl baseline` | the ratchet |
+| `.githooks/pre-commit` | project | `make precommit`, timed |
+| `.github/workflows/check.yml`, `nightly.yml`, `review.yml` | project | the rings; `review.yml` is `workflow_dispatch` only, off by default |
+| `AGENTS.md` | project; one marked block is pawl's | the review checklist from the waived rules, and the three commands an agent needs |
+| `.gitignore` | project | `.pawl/reports/`, `AGENTS.local.md` |
+
+## Decisions
+
+1. Go, one static binary, MIT. The common pattern for developer tooling; `go install`, goreleaser, a Homebrew tap.
+2. make, not a shared Taskfile or a renderer. The targets are the project's; pawl verifies and never pushes.
+3. ast-grep for patterns (one binary, YAML rules, MIT). Semgrep's registry rules are licensed for internal use only,
+   which an open-source tool cannot depend on.
+4. Each stack's native complexity tool; no meta-linter. jscpd for duplication because no native linter does it.
+5. Pins live in each stack's native file; `doctor` reads them. mise is optional glue; the toolbox image
+   (`ghcr.io/rojosinalma/pawl-toolbox`) is an optional artifact built from the same pins for CI and machines without
+   the tools.
+6. Shrink-only baseline compared with the base commit, stale baselines fail: the ratchet is strict in both directions.
+7. No retries anywhere. A flaky test goes on a quarantine list in the manifest with an issue link, and that list is a
+   ratchet metric.
+8. AI review is a separate, opt-in workflow template. Never a required check.
+9. The agent gate (rules on first edit, lint after edit) belongs to the agent runtime, not to pawl.
+10. Budgets: hook 10 s target / 20 s limit, check 10 / 15 min, nightly 20 / 30 min; medians of the last ten runs with
+    setup excluded; target warns, limit fails.
+11. The merge queue is a repository setting. The generated check workflow triggers on `merge_group` so a queue works
+    where the repository has one.

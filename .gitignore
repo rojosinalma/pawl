@@ -1,0 +1,9 @@
+# pawl run reports and local ring timings
+.pawl/reports/
+
+# local agent instructions
+AGENTS.local.md
+
+# build output
+/dist/
+/pawl

@@ -1,0 +1,15 @@
+# pawl rule pack: code.dropped-results for shell. A script fails on the first failing command.
+id: shell-strict-mode
+language: Bash
+severity: error
+message: The script does not set strict mode; add `set -euo pipefail` after the shebang.
+rule:
+  kind: program
+  not:
+    has:
+      any:
+        - pattern: set -euo pipefail
+        - pattern: set -eu -o pipefail
+        - pattern: set -o errexit
+      stopBy: end
+files: ["**/*.sh", "**/*.bash"]
