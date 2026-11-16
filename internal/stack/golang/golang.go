@@ -20,7 +20,7 @@ const GolangciLintVersion = "2.15.0"
 const (
 	GovulncheckModule = "golang.org/x/vuln/cmd/govulncheck@v1.9.0"
 	Gcov2lcovModule   = "github.com/jandelgado/gcov2lcov@v1.1.1"
-	GremlinsVersion   = "0.5.1"
+	GremlinsVersion   = "0.6.0"
 )
 
 type Adapter struct{}

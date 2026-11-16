@@ -66,7 +66,8 @@ func TestManifestProblems(t *testing.T) {
 		rule string
 		want string
 	}{
-		{"empty rule", func(m *manifest.Manifest) { delete(m.Rules, "code.lint") }, "code.lint", "neither a step nor a waiver"},
+		{"missing rule", func(m *manifest.Manifest) { delete(m.Rules, "code.lint") }, "code.lint", "missing from the manifest"},
+		{"empty rule", func(m *manifest.Manifest) { m.Rules["code.lint"] = manifest.Rule{} }, "code.lint", "neither a step nor a waiver"},
 		{"short waiver", func(m *manifest.Manifest) { m.Rules["code.types"] = manifest.Rule{Waived: "no"} }, "code.types", "at least three words"},
 		{"missing ring", func(m *manifest.Manifest) { delete(m.Rings, "nightly") }, "repo.targets", "rings.nightly"},
 	} {
