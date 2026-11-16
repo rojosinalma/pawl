@@ -101,9 +101,9 @@ func newAgentsData(p *project.Project) agentsData {
 		case !ok:
 			continue
 		case e.Waived != "":
-			d.NotEnforced = append(d.NotEnforced, title+": "+oneLine(e.Waived))
-		case len(e.Gaps) > 0:
-			d.NotEnforced = append(d.NotEnforced, title+" ("+oneLine(strings.Join(e.Gaps, "; "))+")")
+			// The title is enough for an agent to apply the rule by judgment; the reason and the partial gaps of
+			// enforced rules stay in pawl.toml (`pawl rules --waived`), out of the context every session pays for.
+			d.NotEnforced = append(d.NotEnforced, title)
 		}
 	}
 	return d

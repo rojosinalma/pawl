@@ -157,6 +157,8 @@ func (Adapter) Rules(stack.Params) map[string]stack.Enforcement {
 		"speed.rings":         pawl,
 		"speed.affected":      pawl,
 		"tests.principles":    pawl,
+		"drift.contracts":     {Waived: "no contract declared; list the schemas and APIs under [[contracts]] in pawl.toml and set step = \"check\""},
+		"drift.docs":          {Waived: "no extractor compares the documented surface with the code; write one as a make step and name it here"},
 		"code.naming":         {Step: "lint", Via: []string{"typos"}},
 	}
 }
