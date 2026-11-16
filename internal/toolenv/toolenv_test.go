@@ -195,3 +195,41 @@ func TestExec(t *testing.T) {
 		t.Error("exit 3 is a failure")
 	}
 }
+
+func TestAppendPath(t *testing.T) {
+	dir := t.TempDir()
+	cases := map[string]struct{ env, want []string }{
+		"appended":    {[]string{"PATH=/a", "B=1"}, []string{"PATH=/a:" + dir, "B=1"}},
+		"already on":  {[]string{"PATH=" + dir + ":/a"}, []string{"PATH=" + dir + ":/a"}},
+		"no PATH":     {[]string{"B=1"}, []string{"B=1", "PATH=" + dir}},
+		"last PATH":   {[]string{"PATH=/x", "PATH=/a"}, []string{"PATH=/x", "PATH=/a:" + dir}},
+		"missing dir": {[]string{"PATH=/a"}, []string{"PATH=/a"}},
+	}
+	for name, c := range cases {
+		d := dir
+		if name == "missing dir" {
+			d = filepath.Join(dir, "none")
+		}
+		if got := appendPath(c.env, d); !slices.Equal(got, c.want) {
+			t.Errorf("%s: got %v, want %v", name, got, c.want)
+		}
+	}
+}
+
+func TestEnvironAppendsLocalBinOnce(t *testing.T) {
+	home := t.TempDir()
+	local := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(local, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "/usr/bin")
+	env, err := Environ(t.Context(), t.TempDir())
+	if err != nil || pathOf(env) != "/usr/bin:"+local {
+		t.Errorf("PATH = %q, %v", pathOf(env), err)
+	}
+	t.Setenv("PATH", local+":/usr/bin")
+	if env, _ := Environ(t.Context(), t.TempDir()); pathOf(env) != local+":/usr/bin" {
+		t.Errorf("already on PATH: %q", pathOf(env))
+	}
+}

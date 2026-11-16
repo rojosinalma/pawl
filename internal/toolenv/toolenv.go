@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -62,10 +63,14 @@ func MiseVars(root string) []string {
 }
 
 // Environ returns the process environment with the directories of the project's mise tools (`mise bin-paths`, run
-// in root) in front of PATH. Without mise or without a mise.toml or .tool-versions in root it returns the process
-// environment unchanged.
+// in root) in front of PATH, and ~/.local/bin, where pawl installs mise and make, at its end when that directory
+// exists and PATH lacks it. Without mise or without a mise.toml or .tool-versions in root the tool directories are
+// left out.
 func Environ(ctx context.Context, root string) ([]string, error) {
 	base := config.Environ()
+	if dir, err := LocalBin(); err == nil {
+		base = appendPath(base, dir)
+	}
 	r := Exec{Env: append(append([]string(nil), base...), MiseVars(root)...), Timeout: binPathsTimeout}
 	return environ(ctx, r, MisePath(), base, root), nil
 }
@@ -107,4 +112,26 @@ func PrependPath(env, dirs []string) []string {
 		}
 	}
 	return append(out, "PATH="+front)
+}
+
+// appendPath returns env with dir at the end of its PATH, unchanged when dir is not a directory or already on PATH.
+func appendPath(env []string, dir string) []string {
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return env
+	}
+	path := pathOf(env)
+	if slices.Contains(filepath.SplitList(path), dir) {
+		return env
+	}
+	if path != "" {
+		dir = path + string(filepath.ListSeparator) + dir
+	}
+	out := append([]string(nil), env...)
+	for i := len(out) - 1; i >= 0; i-- {
+		if strings.HasPrefix(out[i], "PATH=") {
+			out[i] = "PATH=" + dir
+			return out
+		}
+	}
+	return append(out, "PATH="+dir)
 }

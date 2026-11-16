@@ -301,3 +301,16 @@ func TestRunAnyTargetButRecordOnlyRings(t *testing.T) {
 		t.Errorf("the ring was not recorded: %v", err)
 	}
 }
+
+func TestRunFindsMakeOnTheGivenPath(t *testing.T) {
+	p := newProject(t, map[string]string{"Makefile": ringMakefile})
+	environ := []string{"PATH=" + pathOf(t)}
+	t.Setenv("PATH", t.TempDir())
+	if passed, err := Run(t.Context(), p, "precommit", Options{Environ: environ}); err != nil || !passed {
+		t.Fatalf("make on the PATH of Environ only: passed %v, err %v", passed, err)
+	}
+	_, err := Run(t.Context(), p, "precommit", Options{Environ: []string{"PATH=" + t.TempDir()}})
+	if err == nil || !strings.Contains(err.Error(), "make is not available") {
+		t.Errorf("no make anywhere: %v", err)
+	}
+}

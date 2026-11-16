@@ -85,16 +85,21 @@ type call struct {
 	argv string
 }
 
-// fakeRun records the commands and fails the ones listed.
+// fakeRun records the commands, prints the output listed (else "ran <command>") and fails the ones listed.
 type fakeRun struct {
 	calls []call
 	fail  map[string]error
+	out   map[string]string
 }
 
 func (f *fakeRun) run(_ context.Context, c command, stdout, _ io.Writer) error {
 	line := strings.Join(c.argv, " ")
 	f.calls = append(f.calls, call{dir: c.dir, env: c.env, argv: line})
-	_, _ = fmt.Fprintln(stdout, "ran", line)
+	if out, ok := f.out[line]; ok {
+		_, _ = fmt.Fprint(stdout, out)
+	} else {
+		_, _ = fmt.Fprintln(stdout, "ran", line)
+	}
 	return f.fail[line]
 }
 
@@ -110,6 +115,8 @@ func newTest(t *testing.T, srv *httptest.Server, archive []byte, fr *fakeRun) *i
 	in.pathVar = "/usr/bin"
 	in.baseEnv = []string{"PATH=/usr/bin"}
 	in.misePath = func() string { return "" }
+	in.makePath = func() string { return "/usr/bin/make" }
+	in.osRelease = func() string { return "" }
 	in.environ = func(context.Context, string) ([]string, error) { return []string{"PATH=/mise/tools:/usr/bin"}, nil }
 	in.run = fr.run
 	return in
@@ -151,7 +158,7 @@ func TestInstallsMiseThenToolsThenStack(t *testing.T) {
 	mise := filepath.Join(in.binDir, "mise")
 	checkInstalled(t, mise)
 	names := stepNames(res)
-	if names != "mise,tools of mise.toml,gems,rust components" {
+	if names != "mise,make,tools of mise.toml,gems,rust components" {
 		t.Fatalf("steps = %s", names)
 	}
 	if res.Steps[0].Err != nil || !strings.Contains(res.Steps[0].Note, "add "+in.binDir+" to PATH") {
@@ -169,7 +176,7 @@ func TestInstallsMiseThenToolsThenStack(t *testing.T) {
 			t.Errorf("%s ran in %s with %v", c.argv, c.dir, c.env)
 		}
 	}
-	if res.Steps[2].Err == nil || res.Steps[3].Err != nil || !res.Failed() {
+	if res.Steps[1].Skipped != "already at /usr/bin/make" || res.Steps[3].Err == nil || res.Steps[4].Err != nil || !res.Failed() {
 		t.Errorf("a failing gems step does not stop the rust one: %+v", res.Steps)
 	}
 	if !strings.Contains(out.String(), "ran rustup component add") {
@@ -228,8 +235,8 @@ func TestDownloadFailures(t *testing.T) {
 		if err := res.Steps[0].Err; err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: err = %v, want %q", name, err, c.want)
 		}
-		if res.Steps[1].Skipped != "mise did not install" || len(fr.calls) != 0 {
-			t.Errorf("%s: tools step %+v, calls %v", name, res.Steps[1], fr.calls)
+		if res.Steps[2].Skipped != "mise did not install" || len(fr.calls) != 0 {
+			t.Errorf("%s: tools step %+v, calls %v", name, res.Steps[2], fr.calls)
 		}
 		if name != "exists" && name != "dir is file" {
 			if _, err := os.Stat(filepath.Join(in.binDir, "mise")); err == nil {
@@ -257,7 +264,7 @@ func TestSkips(t *testing.T) {
 	fr := &fakeRun{}
 	in := newTest(t, srv, archive, fr)
 	res := in.install(t.Context(), newProj(t, map[string]string{"mise.toml": "", "Gemfile": ""}), Options{SkipMise: true})
-	if res.Steps[0].Skipped != "skipped on request" || res.Steps[1].Skipped != "mise is not installed" {
+	if res.Steps[0].Skipped != "skipped on request" || res.Steps[2].Skipped != "mise is not installed" {
 		t.Errorf("skip mise: %+v", res.Steps)
 	}
 	if len(fr.calls) != 1 || fr.calls[0].argv != "bundle install" {
@@ -267,13 +274,13 @@ func TestSkips(t *testing.T) {
 	in.misePath = func() string { return "/opt/mise" }
 	fr.calls = nil
 	res = in.install(t.Context(), newProj(t, map[string]string{"mise.toml": ""}), Options{SkipMise: true})
-	if res.Steps[1].Err != nil || len(fr.calls) != 1 || fr.calls[0].argv != "/opt/mise install --yes" {
+	if res.Steps[2].Err != nil || len(fr.calls) != 1 || fr.calls[0].argv != "/opt/mise install --yes" {
 		t.Errorf("an existing mise still installs the tools: %+v, %+v", res.Steps, fr.calls)
 	}
 
 	fr.calls = nil
 	res = in.install(t.Context(), newProj(t, map[string]string{"go.mod": "module x\n"}), Options{})
-	if !strings.HasPrefix(res.Steps[0].Skipped, "the project has no mise.toml") || res.Steps[1].Skipped != "no mise configuration" {
+	if !strings.HasPrefix(res.Steps[0].Skipped, "the project has no mise.toml") || res.Steps[2].Skipped != "no mise configuration" {
 		t.Errorf("no config: %+v", res.Steps)
 	}
 	if len(fr.calls) != 2 || !strings.HasPrefix(fr.calls[0].argv, "go get -tool ") || fr.calls[1].argv != "go mod tidy" || rel.hits != 0 {
@@ -300,9 +307,14 @@ func TestRun(t *testing.T) {
 	}
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
-	res, err := Run(t.Context(), newProj(t, map[string]string{"run.sh": "#!/bin/sh\n"}), Options{})
-	if err != nil || stepNames(res) != "mise,tools of mise.toml" || res.Failed() {
+	shell := newProj(t, map[string]string{"run.sh": "#!/bin/sh\n"})
+	res, err := Run(t.Context(), shell, Options{SkipMake: true})
+	if err != nil || stepNames(res) != "mise,make,tools of mise.toml" || res.Failed() {
 		t.Errorf("shell project: %v, %+v", err, res)
+	}
+	res, _ = Run(t.Context(), shell, Options{SkipMise: true})
+	if err := res.Steps[1].Err; err == nil || !strings.Contains(err.Error(), "install it with") {
+		t.Errorf("no make, no mise: %+v", res.Steps[1])
 	}
 }
 
