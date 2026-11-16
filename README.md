@@ -1,10 +1,14 @@
 # pawl
 
-A pawl is the small catch that lets a ratchet turn one way only. `pawl` makes a repository's own tooling enforce a
-catalog of quality rules, and makes the numbers that matter move one way only.
+Pawl is a multi-stack tool for code quality and structure through configurable abstract rules that are enforced through tooling and automation native to the corresponding [stack](https://github.com/rojosinalma/pawl/main/README.md#Stacks).
 
-It is built for repositories where coding agents do much of the work: rules that live in prose are followed some of
-the time; rules that live in tooling are followed every time, at no cost in tokens.
+Agents and AI Models take Skills and Rules that come in prose as suggestions if these are not hard-blocking them through tooling, so Prawl was born out of the need to stop wasting tokens you need to load at every turn and have quality gates that won't let code get to your releases if they don't meet your quality needs.
+
+## What is a _real_ Pawl?
+
+A pawl is the small catch or gear that lets a ratchet wrench turn only one way.
+
+`pawl` makes a repository's own tooling enforce a catalog of quality rules, and have them only move one way, the positive way.
 
 ## What it does
 
