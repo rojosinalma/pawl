@@ -14,9 +14,9 @@ There is an extent that can't be covered by tooling, this should be added to Ski
 
 ### What is a _real_ Pawl?
 
-A [pawl](https://en.wikipedia.org/wiki/Pawl) is the small catch with a gear that lets it turn only one way.
+A [pawl](https://en.wikipedia.org/wiki/Pawl) is the small catch that holds a gear so it can turn only one way.
 
-Pawl makes a project own tooling enforce a catalog of rules, and have them only move one way, the positive way.
+Pawl makes a project's own tooling enforce a catalog of rules, and keeps them moving one way only, the positive way.
 
 ## What it does
 
@@ -64,7 +64,7 @@ mise install     # the pinned tools of the rings (or install them your own way; 
 make check       # the merge gate: lint, tests, `pawl verify`
 ```
 
-`make` is the real contract, Pawl is a frontend over it for ease of use.
+`make` is the real contract; Pawl is a frontend over it for ease of use.
 
 `pawl run <target>` runs any `make` target (`lint`, `fmt`, `test`, a single `lint-<tool>`) with the pinned tools on
 PATH, so a shell without mise activated still works.
@@ -73,7 +73,7 @@ PATH, so a shell without mise activated still works.
 prints only what failed, records the ring's time, and runs the ring in the toolbox image when
 the clone names one.
 
-The generated `mise.toml` pins the tools without a native pin file, the runtime of each stack stays where the
+The generated `mise.toml` pins the tools without a native pin file; the runtime of each stack stays where the
 stack keeps it (`go.mod`, `.ruby-version`, `.python-version`, `rust-toolchain.toml`).
 
 `pawl init` never overwrites a file. An existing `Makefile` gains only the targets it lacks; existing linter
@@ -110,7 +110,7 @@ gaps = ["shell: shell has no type checker; ShellCheck covers quoting and expansi
 waived = "go: no layer boundaries declared yet; declare them under depguard and set step = \"lint\""
 ```
 
-A waiver is a decision, explicitly written down. Waived rules that a tool could enforce are listed by `pawl rules --waived`, so you never loose track of the reasons behind waived rules.
+A waiver is a decision, explicitly written down. Waived rules that a tool could enforce are listed by `pawl rules --waived`, so you never lose track of the reasons behind waived rules.
 
 ## Stacks
 
@@ -133,7 +133,7 @@ machines without the tools:
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work ghcr.io/rojosinalma/pawl-toolbox:latest make check
 ```
 
-A machine without the tools can also run the git hook in the image, set it once per clone:
+A machine without the tools can also run the git hook in the image; set it once per clone:
 
 ```sh
 git config pawl.toolbox ghcr.io/rojosinalma/pawl-toolbox:latest
