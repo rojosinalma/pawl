@@ -66,12 +66,12 @@ func TestClassesAreOrderedAndCoverEveryRule(t *testing.T) {
 
 func TestValidateRejectsBrokenRules(t *testing.T) {
 	cases := map[string]Rule{
-		"needs an id":           {ID: "nodot", Class: Hygiene, Ring: Check, Title: "t", Statement: "s"},
-		"needs a title":         {ID: "code.x", Class: Hygiene, Ring: Check, Statement: "s"},
-		"needs a ring":          {ID: "code.x", Class: Hygiene, Title: "t", Statement: "s"},
-		"needs guidance":        {ID: "review.x", Class: Review, Title: "t", Statement: "s"},
-		"incomplete source":     {ID: "review.x", Class: Review, Title: "t", Statement: "s", Guidance: "g", Source: []Source{{Repo: "a/b"}}},
-		"unknown class":         {ID: "other.x", Class: "other", Title: "t", Statement: "s"},
+		"needs an id":       {ID: "nodot", Class: Hygiene, Ring: Check, Title: "t", Statement: "s"},
+		"needs a title":     {ID: "code.x", Class: Hygiene, Ring: Check, Statement: "s"},
+		"needs a ring":      {ID: "code.x", Class: Hygiene, Title: "t", Statement: "s"},
+		"needs guidance":    {ID: "review.x", Class: Review, Title: "t", Statement: "s"},
+		"incomplete source": {ID: "review.x", Class: Review, Title: "t", Statement: "s", Guidance: "g", Source: []Source{{Repo: "a/b"}}},
+		"unknown class":     {ID: "other.x", Class: "other", Title: "t", Statement: "s"},
 	}
 	for want, rule := range cases {
 		err := validate(rule)

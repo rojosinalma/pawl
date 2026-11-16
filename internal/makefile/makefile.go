@@ -236,8 +236,8 @@ func Generate(adapters []stack.Adapter, p stack.Params, diffCoverage int, base s
 
 	rule("check", "the merge gate: lint, tests, then the catalog verification", []string{"lint", "test"}, []string{"$(PAWL) check"})
 	rule("fmt", "rewrite files with the formatters", nil, collect(func(f stack.Make) []string { return f.Fmt }))
-	rule("fmt-check", "fail when a file is not formatted", nil, collect(func(f stack.Make) []string { return f.FmtCheck }))
-	lint := append(collect(func(f stack.Make) []string { return f.FmtCheck }), collect(func(f stack.Make) []string { return f.Lint })...)
+	rule("fmt-check", "fail when a file is not formatted; every formatter runs", nil, keepGoing(collect(func(f stack.Make) []string { return f.FmtCheck })))
+	lint := append([]string{"$(MAKE) --no-print-directory fmt-check"}, collect(func(f stack.Make) []string { return f.Lint })...)
 	rule("lint", "the format check, every linter, type checker and pattern rule on the whole tree; every step runs", nil, keepGoing(lint))
 	rule("test", "the test suites; PAWL_FULL=1 runs everything, otherwise the affected scope", nil, collect(func(f stack.Make) []string { return f.Test }))
 	rule("precommit", "staged files only, under ten seconds; run by the git hook", nil, collect(func(f stack.Make) []string { return f.Precommit }), []string{"$(PAWL) check --ring precommit"})

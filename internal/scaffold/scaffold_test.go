@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"github.com/rojosinalma/pawl/internal/stack/golang"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,7 +150,7 @@ func checkManifest(t *testing.T, dir string, _ *Result) {
 
 func checkHints(t *testing.T, _ string, res *Result) {
 	t.Helper()
-	if !hasHint(res, "run: go get -tool golang.org/x/vuln/cmd/govulncheck@v1.9.0 github.com/jandelgado/gcov2lcov@v1.1.1") {
+	if !hasHint(res, "run: go get -tool "+golang.GovulncheckModule+" "+golang.Gcov2lcovModule) {
 		t.Errorf("hints = %v", res.Hints)
 	}
 }
