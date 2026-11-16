@@ -40,7 +40,7 @@ With pawl:
 cd your-project
 pawl init        # detect the stacks; write pawl.toml, missing tool configs, make targets, the hook, the workflows
 pawl install     # mise when the machine lacks it, the pinned tools, each stack's packages; then `pawl doctor`
-make lint        # the first run shows what the code owes; fix what you want to fix now
+pawl run lint    # the first run shows what the code owes; fix what you want to fix now
 pawl baseline    # record the rest (suppressions, duplicated blocks, oversized files): from here it only shrinks
 pawl check       # the merge gate, quietly: one line when it passes, only the failing steps when it does not
 ```
@@ -51,6 +51,9 @@ The same with mise and make, which is what CI runs:
 mise install     # the pinned tools of the rings (or install them your own way; `pawl doctor` verifies)
 make check       # the merge gate: lint, tests, pawl verify
 ```
+
+`pawl run <target>` runs any make target (`lint`, `fmt`, `test`, a single `lint-<tool>`) with the pinned tools on
+PATH, so a shell without mise activated still works.
 
 make is the contract; pawl is a front end over it. `pawl check` is `pawl run check`: it runs `make check` with the
 pinned tools on PATH, prints only what failed, records the ring's time, and runs the ring in the toolbox image when
@@ -68,10 +71,10 @@ Day to day:
 |---|---|
 | `make check` | lint, the affected tests, and the catalog verification; the same command CI runs |
 | `pawl check` | `make check` through `pawl run`: quiet output, the pinned tools on PATH, the toolbox fallback, timing |
-| `pawl run <ring>` | one ring (`precommit`, `check`, `nightly`) through make; `--verbose` streams make's output, `--no-toolbox` stays on this machine |
+| `pawl run <target>` | a make target through pawl: a ring (`precommit`, `check`, `nightly`) or any other (`lint`, `fmt`, `test`); `--verbose` streams make's output, `--no-toolbox` stays on this machine |
 | `pawl verify` | the catalog verification alone (manifest, targets, tool configurations, text checks, ratchet); `make check` ends with it |
 | `pawl install` | mise when it is missing, the tools pinned in `mise.toml`, each stack's packages; then `pawl doctor` |
-| `make fmt` | rewrite files with the stack's formatters |
+| `make fmt`, `pawl run fmt` | rewrite files with the stack's formatters |
 | `pawl status` | why the pull request of this branch fails: the check, the first file and line, the fix |
 | `pawl rules` | the catalog with what this project does about each rule; `pawl rules show <id>` explains one |
 | `pawl baseline` | record improved ratchet values; `--grow "reason"` is the one way up |

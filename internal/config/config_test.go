@@ -33,6 +33,9 @@ func TestInsideMakeFollowsMakeLevel(t *testing.T) {
 	t.Setenv("MAKELEVEL", "1")
 	if !InsideMake() {
 		t.Error("MAKELEVEL=1 is inside make")
+	}
+}
+
 func TestProcessEnvironment(t *testing.T) {
 	t.Setenv("PATH", "/a:/b")
 	t.Setenv("HOME", "/home/someone")

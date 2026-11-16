@@ -2,7 +2,7 @@
 # `make check` is the merge gate; `make precommit` runs from .githooks/pre-commit on staged files.
 .DEFAULT_GOAL := check
 SHELL := /bin/sh
-.PHONY: build toolbox toolbox-lock e2e e2e-project e2e-project-check check fmt fmt-check lint test precommit coverage audit mutation nightly lint-ast-grep lint-jscpd lint-typos lint-gitleaks lint-golangci-lint lint-mod-tidy lint-shellcheck lint-hadolint lint-actionlint lint-zizmor lint-docker-user
+.PHONY: build toolbox toolbox-lock e2e e2e-project e2e-project-check e2e-project-pawl check fmt fmt-check lint test precommit coverage audit mutation nightly lint-ast-grep lint-jscpd lint-typos lint-gitleaks lint-golangci-lint lint-mod-tidy lint-shellcheck lint-hadolint lint-actionlint lint-zizmor lint-docker-user
 
 # Paths the file-list tools skip, as an extended regular expression; keep it in step with project.exclude in pawl.toml.
 PAWL_EXCLUDE ?= ^(test/fixtures/)
@@ -136,3 +136,9 @@ e2e-project-check:  ## run the new project's own gate with the tools its mise.to
 	cd "$(E2E_PROJECT)" && $(MAKE) lint PAWL="$(CURDIR)/pawl"
 	cd "$(E2E_PROJECT)" && git add -A && "$(CURDIR)/pawl" baseline
 	cd "$(E2E_PROJECT)" && $(MAKE) check PAWL="$(CURDIR)/pawl"
+
+e2e-project-pawl:  ## the same new project through pawl alone: install (mise, tools, packages), lint, baseline, gate
+	cd "$(E2E_PROJECT)" && "$(CURDIR)/pawl" install
+	cd "$(E2E_PROJECT)" && PAWL="$(CURDIR)/pawl" "$(CURDIR)/pawl" run lint --no-toolbox
+	cd "$(E2E_PROJECT)" && git add -A && "$(CURDIR)/pawl" baseline
+	cd "$(E2E_PROJECT)" && PAWL="$(CURDIR)/pawl" "$(CURDIR)/pawl" check --no-toolbox

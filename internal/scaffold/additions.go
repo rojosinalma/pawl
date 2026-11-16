@@ -75,6 +75,7 @@ func addGo(_ *project.Project, w *writer) error {
 	}
 	if step, ok := goStep(gomod); ok {
 		w.hint(step)
+		w.hint(goTidyStep())
 	}
 	return nil
 }
@@ -119,6 +120,9 @@ func SetupSteps(p *project.Project) []SetupStep {
 	for _, a := range p.StackAdapters() {
 		if step, ok := setupStep(p, a.Name()); ok {
 			out = append(out, step)
+			if step.Name == goToolsStep {
+				out = append(out, goTidyStep())
+			}
 		}
 	}
 	return out
@@ -165,7 +169,16 @@ func goStep(gomod string) (SetupStep, bool) {
 	if len(missing) == 0 {
 		return SetupStep{}, false
 	}
-	return SetupStep{Name: "go tools", Command: append([]string{"go", "get", "-tool"}, missing...)}, true
+	return SetupStep{Name: goToolsStep, Command: append([]string{"go", "get", "-tool"}, missing...)}, true
+}
+
+// goToolsStep names the step that adds the Go tools.
+const goToolsStep = "go tools"
+
+// goTidyStep follows the tools: `go get -tool` records the modules, `go mod tidy` completes go.sum, and the lint
+// step `go mod tidy -diff` fails until it has run.
+func goTidyStep() SetupStep {
+	return SetupStep{Name: "go.sum", Command: []string{"go", "mod", "tidy"}}
 }
 
 func rubyStep() SetupStep {

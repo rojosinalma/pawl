@@ -32,11 +32,12 @@ func Git(t testing.TB, dir string, args ...string) {
 	}
 }
 
-// Isolate clears the PAWL_* variables for the test, so a run inside `make check` (which sets them for the real
-// project) measures the fixture and not the caller's environment.
+// Isolate clears the PAWL_* and make variables for the test, so a run inside `make check` (which sets them for the
+// real project) measures the fixture and not the caller's environment.
 func Isolate(t testing.TB) {
 	t.Helper()
-	for _, name := range []string{"PAWL_BASE", "PAWL_FULL", "PAWL_VERBOSE", "PAWL_WORK_TYPE"} {
+	// the make variables too: a test that starts make must not inherit the flags of the make that runs the tests
+	for _, name := range []string{"PAWL_BASE", "PAWL_FULL", "PAWL_VERBOSE", "PAWL_WORK_TYPE", "MAKEFLAGS", "MFLAGS", "MAKELEVEL"} {
 		t.Setenv(name, "")
 	}
 }

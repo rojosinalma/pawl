@@ -136,6 +136,10 @@ func (r *run) checkPRSize() error {
 		r.rep.Skip(rule, "no base ref: nothing to measure the change against")
 		return nil
 	}
+	if r.onBaseBranch() {
+		r.rep.Skip(rule, "on the base branch: there is no pull request to size")
+		return nil
+	}
 	wt := r.workType()
 	budget, ok := r.p.Manifest.Budgets.PRLines[wt]
 	if !ok || budget <= 0 {
@@ -151,6 +155,20 @@ func (r *run) checkPRSize() error {
 			WithFix(fmt.Sprintf("split it into smaller pull requests; set %s when the branch name does not say the work type", workTypeEnv)))
 	}
 	return nil
+}
+
+// onBaseBranch reports whether the checkout is the branch the manifest's base names ("main" for "origin/main"):
+// commits there are on their way to the remote, not a pull request.
+func (r *run) onBaseBranch() bool {
+	if r.p.Repo == nil {
+		return false
+	}
+	branch := r.p.Repo.Branch()
+	base := r.p.Manifest.Base
+	if i := strings.Index(base, "/"); i >= 0 {
+		base = base[i+1:]
+	}
+	return branch != "" && branch == base
 }
 
 // workType is the budget key: the environment override, then the branch prefix, then feature.

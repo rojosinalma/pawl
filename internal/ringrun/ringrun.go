@@ -1,4 +1,4 @@
-// Package ringrun runs a ring (precommit, check, nightly) through the project's make target and reports it the way
+// Package ringrun runs a make target of the project, a ring (precommit, check, nightly) above all, and reports it the way
 // an agent or a person needs it: one line when it passes, only the failing steps when it does not.
 package ringrun
 
@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -138,7 +139,7 @@ func runVerbose(ctx context.Context, ex executor, s site, root, ring string, std
 		return false, finishErr(ctx, s, err)
 	}
 	d := time.Since(start)
-	_ = rings.Record(root, ring, d)
+	record(root, ring, d)
 	if code == 0 {
 		writeLines(stdout, []string{passLine(ring, d, -1)})
 		return true, nil
@@ -182,7 +183,7 @@ func runQuiet(ctx context.Context, ex executor, s site, root, ring string, stdou
 		return false, finishErr(ctx, s, err)
 	}
 	d := time.Since(start)
-	_ = rings.Record(root, ring, d)
+	record(root, ring, d)
 	lines := splitLines(out.String())
 	if code == 0 {
 		writeLines(stdout, []string{passLine(ring, d, stepCount(lines, isTraced))})
@@ -213,12 +214,21 @@ func detectTrace(ctx context.Context, ex executor, s site) (bool, error) {
 	return hasTrace(out.String()), nil
 }
 
-// checkTarget fails for a ring pawl does not know and for a project whose Makefile lacks the ring's target.
-func checkTarget(root, ring string) error {
-	switch ring {
+// record stores the duration of a ring for `pawl budget`; other targets have no budget and are not recorded.
+func record(root, target string, d time.Duration) {
+	switch target {
 	case "precommit", "check", "nightly":
-	default:
-		return fmt.Errorf("unknown ring %q: the rings are precommit, check and nightly", ring)
+		_ = rings.Record(root, target, d) // a timing that cannot be written must not fail the run
+	}
+}
+
+// targetName is what a make target pawl runs may look like: no flag, no variable assignment, no shell syntax.
+var targetName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_./-]*$`)
+
+// checkTarget fails for a name that is not a plain make target and for a project whose Makefile lacks it.
+func checkTarget(root, ring string) error {
+	if !targetName.MatchString(ring) {
+		return fmt.Errorf("%q is not a make target name", ring)
 	}
 	m, ok, err := makefile.Read(root)
 	if err != nil {

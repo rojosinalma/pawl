@@ -32,7 +32,7 @@ func TestSetupSteps(t *testing.T) {
 		want   string
 	}{
 		{"go without tools", map[string]string{"go.mod": "module x\n"}, nil,
-			"go tools: go get -tool " + golang.GovulncheckModule + " " + golang.Gcov2lcovModule},
+			"go tools: go get -tool " + golang.GovulncheckModule + " " + golang.Gcov2lcovModule + "; go.sum: go mod tidy"},
 		{"go with tools", map[string]string{"go.mod": "module x\n" + tools}, nil, ""},
 		{"go without go.mod", map[string]string{"main.go": "package main\n"}, []string{"go"}, ""},
 		{"ruby", map[string]string{"Gemfile": "source 'x'\n"}, nil, "gems: bundle install"},
@@ -59,7 +59,7 @@ func TestSetupSteps(t *testing.T) {
 
 func TestSetupStepsFollowAdapterOrder(t *testing.T) {
 	got := stepLines(t, map[string]string{"Cargo.toml": "[package]\n", "Gemfile": "\n", "go.mod": "module x\n"})
-	if len(got) != 3 || !strings.HasPrefix(got[0], "go tools") || !strings.HasPrefix(got[1], "gems") || !strings.HasPrefix(got[2], "rust") {
+	if len(got) != 4 || !strings.HasPrefix(got[0], "go tools") || !strings.HasPrefix(got[1], "go.sum") || !strings.HasPrefix(got[2], "gems") || !strings.HasPrefix(got[3], "rust") {
 		t.Errorf("order: %v", got)
 	}
 }

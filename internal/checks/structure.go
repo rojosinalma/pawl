@@ -54,6 +54,18 @@ func (r *run) checkTargets() error {
 	return nil
 }
 
+// CallsOldCheck reports whether the project's `check` target still calls `pawl check` for the verification, as the
+// Makefiles of pawl v0.1 did. `pawl check` asks this before it starts make, so such a Makefile does not call itself
+// without end.
+func CallsOldCheck(root string) bool {
+	mk, ok, err := makefile.Read(root)
+	if err != nil || !ok {
+		return false
+	}
+	t, ok := mk.Targets["check"]
+	return ok && recipeLinesMatch(mk, t.Recipe, pawlOldCheckRe, false)
+}
+
 // checkOldCalls reports the ring targets whose own recipe still calls `pawl check` for the verification and returns
 // them. Inside make `pawl check` runs the verification with a note, so such a project works until the recipe is fixed.
 func (r *run) checkOldCalls(mk *makefile.Makefile) map[string]bool {

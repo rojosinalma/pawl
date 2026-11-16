@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -138,7 +137,7 @@ func (a *app) printInit(res *scaffold.Result) {
 			fmt.Fprintf(a.stdout, "  %s\n", h)
 		}
 	}
-	fmt.Fprintln(a.stdout, "\nnext: `pawl install` (the pinned tools), `make lint`, `pawl baseline` (records the debt of today), `pawl check`, then commit.")
+	fmt.Fprintln(a.stdout, "\nnext: `pawl install` (the pinned tools), `pawl run lint`, `pawl baseline` (records the debt of today), `pawl check`, then commit.")
 }
 
 func (a *app) installCmd() *cobra.Command {
@@ -190,6 +189,9 @@ func (a *app) printSteps(res *install.Result) {
 		default:
 			fmt.Fprintf(a.stdout, "ok      %s\n", s.Name)
 		}
+		if s.Note != "" {
+			fmt.Fprintf(a.stdout, "        %s\n", s.Note)
+		}
 	}
 }
 
@@ -202,11 +204,11 @@ func ringFlags(cmd *cobra.Command, opts *ringrun.Options) {
 func (a *app) runCmd() *cobra.Command {
 	var opts ringrun.Options
 	cmd := &cobra.Command{
-		Use:   "run <ring>",
-		Short: "Run a ring (" + strings.Join(ringNames, ", ") + ") through make, with the pinned tools on PATH",
+		Use:   "run <target>",
+		Short: "Run a make target (the rings " + strings.Join(ringNames, ", ") + ", or lint, fmt, test, …) with the pinned tools on PATH and quiet output",
 		Args: func(_ *cobra.Command, args []string) error {
-			if len(args) != 1 || !slices.Contains(ringNames, args[0]) {
-				return fmt.Errorf("pawl run takes one ring: %s", strings.Join(ringNames, ", "))
+			if len(args) != 1 {
+				return fmt.Errorf("pawl run takes one make target: a ring (%s) or any other target of the Makefile", strings.Join(ringNames, ", "))
 			}
 			return nil
 		},
@@ -226,8 +228,9 @@ func (a *app) checkCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// A v0.1 Makefile's check recipe calls `pawl check`; running the gate from there would start make again
-			// and never end. Inside make the recipe wants the verification, so it gets it, with a note to fix it.
-			if config.InsideMake() {
+			// and never end. Called by that recipe, the command gives it the verification it wants, with a note
+			// to fix it. A call from any other make recipe is an ordinary run of the gate.
+			if config.InsideMake() && checks.CallsOldCheck(a.dir) {
 				fmt.Fprintln(a.stderr, oldRecipeNote)
 				return a.verify(string(catalog.Check), nil, "text")
 			}

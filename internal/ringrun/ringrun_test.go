@@ -62,14 +62,15 @@ func (f *fakeExecutor) run(_ context.Context, c command) (int, error) {
 	return f.code, nil
 }
 
-func TestRunRejectsUnknownRingAndMissingTarget(t *testing.T) {
+func TestRunRejectsBadNamesAndMissingTargets(t *testing.T) {
 	cases := []struct {
 		name  string
 		files map[string]string
 		ring  string
 		want  string
 	}{
-		{"unknown ring", map[string]string{"Makefile": ringMakefile}, "lint", "precommit, check and nightly"},
+		{"not a target name", map[string]string{"Makefile": ringMakefile}, "--eval=x", "is not a make target name"},
+		{"an assignment", map[string]string{"Makefile": ringMakefile}, "PAWL=evil", "is not a make target name"},
 		{"no Makefile", map[string]string{"README.md": "x\n"}, "check", "no make target check"},
 		{"target missing", map[string]string{"Makefile": "precommit:\n\t@true\n"}, "nightly", "no make target nightly in Makefile; run `pawl init`"},
 	}
@@ -282,4 +283,21 @@ func recorded(t *testing.T, root, ring string) int {
 		t.Fatal(err)
 	}
 	return len(v.Runs[ring])
+}
+
+func TestRunAnyTargetButRecordOnlyRings(t *testing.T) {
+	p := newProject(t, map[string]string{"Makefile": "fmt:\n\t@echo formatted\nprecommit:\n\t@true\n"})
+	ex := &fakeExecutor{}
+	if passed, err := run(t.Context(), ex, p, "fmt", Options{NoToolbox: true}); err != nil || !passed {
+		t.Fatalf("fmt: passed=%v err=%v", passed, err)
+	}
+	if _, err := os.Stat(filepath.Join(p.Root, ".pawl", "reports", "timings.json")); err == nil {
+		t.Error("a target that is not a ring was recorded")
+	}
+	if passed, err := run(t.Context(), ex, p, "precommit", Options{NoToolbox: true}); err != nil || !passed {
+		t.Fatalf("precommit: passed=%v err=%v", passed, err)
+	}
+	if _, err := os.Stat(filepath.Join(p.Root, ".pawl", "reports", "timings.json")); err != nil {
+		t.Errorf("the ring was not recorded: %v", err)
+	}
 }

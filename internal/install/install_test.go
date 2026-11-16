@@ -276,7 +276,7 @@ func TestSkips(t *testing.T) {
 	if !strings.HasPrefix(res.Steps[0].Skipped, "the project has no mise.toml") || res.Steps[1].Skipped != "no mise configuration" {
 		t.Errorf("no config: %+v", res.Steps)
 	}
-	if len(fr.calls) != 1 || !strings.HasPrefix(fr.calls[0].argv, "go get -tool ") || rel.hits != 0 {
+	if len(fr.calls) != 2 || !strings.HasPrefix(fr.calls[0].argv, "go get -tool ") || fr.calls[1].argv != "go mod tidy" || rel.hits != 0 {
 		t.Errorf("calls %+v, %d downloads", fr.calls, rel.hits)
 	}
 }

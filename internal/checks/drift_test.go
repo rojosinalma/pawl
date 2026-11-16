@@ -140,3 +140,14 @@ func TestCountExcluded(t *testing.T) {
 		}
 	}
 }
+
+func TestPRSizeSkipsOnTheBaseBranch(t *testing.T) {
+	f := newFixture(t, true)
+	f.run("git", "checkout", "-q", "-B", "main")
+	f.write("notes.txt", strings.Repeat("line\n", 5000))
+	f.commit("a large change on main")
+	rep := f.check("check", "drift.pr-size")
+	if !skipped(rep, "drift.pr-size") || len(find(rep, "drift.pr-size", "budget")) > 0 {
+		t.Errorf("commits on the base branch are not a pull request:\n%s", dump(rep))
+	}
+}

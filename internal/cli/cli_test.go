@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -214,6 +215,8 @@ func TestCheckInsideMakeVerifiesAndNamesTheOldRecipe(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, ".githooks", "pre-commit")); err != nil {
 		t.Fatal(err)
 	}
+	oldMakefile := strings.ReplaceAll(readFile(t, root, "Makefile"), "$(PAWL) verify", "$(PAWL) check")
+	testrepo.Write(t, root, "Makefile", oldMakefile)
 	t.Setenv("MAKELEVEL", "1")
 	out, stderr, code := pawl(t, root, "check")
 	if code != 1 || !strings.Contains(out, "repo.hook") {
@@ -224,30 +227,91 @@ func TestCheckInsideMakeVerifiesAndNamesTheOldRecipe(t *testing.T) {
 	}
 }
 
-// The runner, the tool environment and the installer are stubs until their packages land; these tests show the
-// commands reach them. Once they work, assert the real outcome here.
+// Inside another make (a project target that calls pawl) a current Makefile gets the gate, not the verification.
+func TestCheckInsideMakeRunsTheGateOfACurrentMakefile(t *testing.T) {
+	root := ringRepo(t)
+	t.Setenv("MAKELEVEL", "1")
+	out, stderr, code := pawl(t, root, "check", "--no-toolbox")
+	if code != 1 || !strings.Contains(out, "pawl: check failed") || strings.Contains(stderr, "change the recipe") {
+		t.Errorf("check inside make with a current Makefile: %d %q %q", code, out, stderr)
+	}
+}
+
+// ringRepo is initRepo with a Makefile whose rings need no tool: precommit passes, check and nightly fail in one step.
+func ringRepo(t *testing.T) string {
+	t.Helper()
+	root := initRepo(t)
+	testrepo.Write(t, root, "Makefile", ".PHONY: precommit check nightly lint-a lint-b\n"+
+		"precommit:\n\t@echo ring ran\n"+
+		"check: lint-a lint-b\n"+
+		"nightly: check\n"+
+		"lint-a:\n\t@echo a is fine\n"+
+		"lint-b:\n\t@echo b is broken; exit 3\n")
+	return root
+}
+
 func TestRunReachesTheRunner(t *testing.T) {
 	t.Setenv("MAKELEVEL", "")
-	root := initRepo(t)
-	for _, args := range [][]string{{"run", "precommit"}, {"run", "nightly", "--verbose", "--no-toolbox"}, {"check"}} {
-		if _, stderr, code := pawl(t, root, args...); code != 1 || !strings.Contains(stderr, "not implemented") {
-			t.Errorf("%v: %d %q", args, code, stderr)
+	root := ringRepo(t)
+	out, stderr, code := pawl(t, root, "run", "precommit", "--no-toolbox")
+	if code != 0 || !strings.Contains(out, "pawl: precommit passed") || strings.Contains(out, "ring ran") {
+		t.Errorf("a passing ring prints one line and exits 0: %d %q %q", code, out, stderr)
+	}
+	out, stderr, code = pawl(t, root, "run", "nightly", "--verbose", "--no-toolbox")
+	if code != 1 || !strings.Contains(out, "a is fine") || !strings.Contains(out, "nightly failed") || stderr != "" && strings.Contains(stderr, "pawl:") {
+		t.Errorf("a failing ring in verbose mode streams everything and exits 1 without an error line: %d %q %q", code, out, stderr)
+	}
+}
+
+func TestCheckIsTheGate(t *testing.T) {
+	t.Setenv("MAKELEVEL", "")
+	root := ringRepo(t)
+	out, stderr, code := pawl(t, root, "check", "--no-toolbox")
+	if code != 1 || !strings.Contains(out, "pawl: check failed") || !strings.Contains(out, "--- lint-b") || !strings.Contains(out, "b is broken") {
+		t.Errorf("check runs the check ring: %d %q %q", code, out, stderr)
+	}
+	if strings.Contains(out, "a is fine") {
+		t.Errorf("the output of a passing step is shown:\n%s", out)
+	}
+}
+
+// The machine of this test has no mise and no tools: PATH holds git, make and sh only, HOME is empty.
+func TestInstallReachesTheInstaller(t *testing.T) {
+	bin := t.TempDir()
+	for _, name := range []string{"git", "make", "sh"} {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			t.Skipf("%s is not installed", name)
+		}
+		if err := os.Symlink(path, filepath.Join(bin, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root := testrepo.New(t, map[string]string{"run.sh": "#!/usr/bin/env bash\nset -euo pipefail\necho hi\n"})
+	if out, stderr, code := pawl(t, root, "init", "--stack", "shell"); code != 0 {
+		t.Fatalf("init failed (%d): %s%s", code, out, stderr)
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("HOME", t.TempDir())
+	out, stderr, code := pawl(t, root, "install", "--no-mise")
+	if code != 1 {
+		t.Errorf("install on a machine without the tools must exit 1: %d %q", code, stderr)
+	}
+	for _, want := range []string{"skipped mise: skipped on request", "skipped tools of mise.toml", "repo.pinned", "shellcheck"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("install output lacks %q:\n%s", want, out)
 		}
 	}
 }
 
-func TestInstallReachesTheInstaller(t *testing.T) {
+func TestRunRejectsAMissingTargetAndBadArguments(t *testing.T) {
 	root := initRepo(t)
-	if _, stderr, code := pawl(t, root, "install", "--no-mise"); code != 1 || !strings.Contains(stderr, "install.Run: not implemented") {
-		t.Errorf("install: %d %q", code, stderr)
+	if _, stderr, code := pawl(t, root, "run", "weekly"); code != 1 || !strings.Contains(stderr, "no make target weekly") {
+		t.Errorf("a missing target: %d %q", code, stderr)
 	}
-}
-
-func TestRunRejectsAnUnknownRing(t *testing.T) {
-	root := initRepo(t)
-	for _, args := range [][]string{{"run", "weekly"}, {"run"}, {"run", "check", "nightly"}} {
+	for _, args := range [][]string{{"run"}, {"run", "check", "nightly"}} {
 		_, stderr, code := pawl(t, root, args...)
-		if code != 1 || !strings.Contains(stderr, "precommit, check, nightly") {
+		if code != 1 || !strings.Contains(stderr, "takes one make target") {
 			t.Errorf("%v: %d %q", args, code, stderr)
 		}
 	}
@@ -255,7 +319,16 @@ func TestRunRejectsAnUnknownRing(t *testing.T) {
 
 func TestInitNamesTheNextCommands(t *testing.T) {
 	out, stderr, code := pawl(t, goRepo(t), "init")
-	if code != 0 || !strings.Contains(out, "next: `pawl install` (the pinned tools), `make lint`, `pawl baseline` (records the debt of today), `pawl check`, then commit.") {
+	if code != 0 || !strings.Contains(out, "next: `pawl install` (the pinned tools), `pawl run lint`, `pawl baseline` (records the debt of today), `pawl check`, then commit.") {
 		t.Errorf("init (%d): %s%s", code, out, stderr)
 	}
+}
+
+func readFile(t *testing.T, root, rel string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(root, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }
